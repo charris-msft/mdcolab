@@ -3,7 +3,7 @@
 ## Document Information
 
 | Field | Value |
-|-------|-------|
+| --- | --- |
 | **Product Name** | mdcolab |
 | **Version** | 1.0 |
 | **Author** | charris |
@@ -21,11 +21,13 @@ Authors write and edit markdown documents in a rich WYSIWYG editor (comparable t
 ### The Problem
 
 Technical writers, product managers, and engineering teams increasingly author documents in markdown because:
+
 - AI tools can read, generate, and modify it natively
 - It's plain text — diffs are meaningful, version control works perfectly
 - It lives alongside code in the same repository
 
 But when it's time for review and collaboration, authors are forced to copy their markdown into Microsoft Word or Google Docs because:
+
 - There's no way to add Word-style comments to a markdown file
 - IDEs and editors don't understand sidecar comment files
 - GitHub PR reviews are line-based, not text-selection-based — designed for code, not prose
@@ -35,6 +37,7 @@ But when it's time for review and collaboration, authors are forced to copy thei
 ### The Solution
 
 A web application where:
+
 1. Authors connect their GitHub repos and open any markdown file
 2. The file renders as a beautiful, readable document (not raw markdown)
 3. Authors can **edit** in a rich WYSIWYG editor that saves back to markdown in the repo
@@ -50,7 +53,7 @@ A web application where:
 ### 2.1 Primary Users
 
 | Persona | Description | Key Need |
-|---------|-------------|----------|
+| --- | --- | --- |
 | **Document Author** | Technical writer, PM, engineer, architect, or team lead who writes documents in markdown | Edit documents in a rich WYSIWYG editor while seeing reviewer comments. Save as clean markdown to GitHub. |
 | **Document Reviewer** | Colleague, stakeholder, or subject-matter expert asked to provide feedback | Read rendered markdown and add text-anchored comments, replies, and suggested edits — without needing to understand markdown or GitHub. |
 
@@ -68,7 +71,7 @@ A web application where:
 ### 3.1 Authentication & Authorization
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | AUTH-1 | Users authenticate via GitHub OAuth 2.0 | P0 |
 | AUTH-2 | The app requests `repo` scope to read/write repository files | P0 |
 | AUTH-3 | User sessions persist across browser sessions (refresh tokens) | P0 |
@@ -79,7 +82,7 @@ A web application where:
 ### 3.2 Repository & File Navigation
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | NAV-1 | Dashboard shows the user's recent documents and repositories | P0 |
 | NAV-2 | Users can browse their accessible GitHub repositories (personal + org) | P0 |
 | NAV-3 | Users can browse the file tree of a repository and select markdown files (.md, .mdx) | P0 |
@@ -90,7 +93,7 @@ A web application where:
 ### 3.3 Document Viewing
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | VIEW-1 | Markdown files render as beautifully formatted documents (not raw markdown) | P0 |
 | VIEW-2 | Rendering supports GitHub-Flavored Markdown: headings, bold, italic, strikethrough, links, images, code blocks, blockquotes, tables, task lists, horizontal rules | P0 |
 | VIEW-3 | Code blocks render with syntax highlighting and a language label | P0 |
@@ -103,7 +106,7 @@ A web application where:
 ### 3.4 Document Editing (WYSIWYG)
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | EDIT-1 | Authors can toggle between **Edit mode** and **Review mode** | P0 |
 | EDIT-2 | Edit mode provides a WYSIWYG editing experience — authors see formatted output as they type, not raw markdown | P0 |
 | EDIT-3 | A **floating bubble toolbar** appears on text selection with formatting options: bold, italic, strikethrough, inline code, link, highlight, comment, suggest edit | P0 |
@@ -123,7 +126,7 @@ A web application where:
 #### 3.5.1 Comment Creation
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | CMT-1 | Users can select any text in the rendered document and create a comment anchored to that selection | P0 |
 | CMT-2 | Comment creation is triggered by: (a) clicking "Comment" in the bubble toolbar, or (b) pressing Ctrl+Alt+M | P0 |
 | CMT-3 | The selected text is highlighted and a new empty comment thread appears in the sidebar with focus in the text input | P0 |
@@ -134,7 +137,7 @@ A web application where:
 #### 3.5.2 Comment Display & Navigation
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | CMT-10 | Comments appear in a **right-hand sidebar panel** with a glass-effect (translucent) background | P0 |
 | CMT-11 | Each comment thread card shows: highlighted text excerpt, author avatar + name, timestamp, comment body, reply count | P0 |
 | CMT-12 | **SVG connector lines** visually link the highlighted text in the document to the corresponding comment card in the sidebar | P1 |
@@ -147,7 +150,7 @@ A web application where:
 #### 3.5.3 Threaded Replies
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | CMT-20 | Users can reply to any comment in a thread | P0 |
 | CMT-21 | Replies are displayed nested within the thread card, each with its own author avatar, timestamp, and body | P0 |
 | CMT-22 | Replying to a thread triggers a notification for the thread's participants | P1 |
@@ -155,7 +158,7 @@ A web application where:
 #### 3.5.4 Comment Resolution
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | CMT-30 | Any participant can resolve a comment thread | P0 |
 | CMT-31 | Resolved threads are visually dimmed (reduced opacity) or hidden, depending on the active filter | P0 |
 | CMT-32 | A filter toggle in the sidebar allows viewing: **Open**, **Resolved**, or **All** threads | P0 |
@@ -165,7 +168,7 @@ A web application where:
 #### 3.5.5 Comment Editing & Deletion
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | CMT-40 | Users can edit their own comments (shows "edited" indicator with timestamp) | P0 |
 | CMT-41 | Users can delete their own comments | P0 |
 | CMT-42 | If all comments in a thread are deleted, the thread and its text highlight are removed | P0 |
@@ -173,7 +176,7 @@ A web application where:
 ### 3.6 @Mentions
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | MEN-1 | Typing `@` in a comment body opens an autocomplete dropdown of GitHub usernames | P0 |
 | MEN-2 | The autocomplete searches GitHub users via the API, filtered by characters typed after `@` | P0 |
 | MEN-3 | Selected mentions render as styled pills (linked to GitHub profile) in the comment body | P1 |
@@ -183,7 +186,7 @@ A web application where:
 ### 3.7 Suggested Edits
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | SUG-1 | When creating a comment on a text selection, users can click "Suggest Edit" to propose replacement text | P0 |
 | SUG-2 | The suggestion shows a **diff preview**: original text with red strikethrough and proposed text in green | P0 |
 | SUG-3 | The document author (or anyone with push access) can **Accept** or **Reject** the suggestion | P0 |
@@ -194,7 +197,7 @@ A web application where:
 ### 3.8 Track Changes
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | TRK-1 | A "Track Changes" toggle shows all pending, accepted, and rejected suggestions inline in the document | P1 |
 | TRK-2 | Pending suggestions display as: original text with strikethrough + proposed text with colored underline | P1 |
 | TRK-3 | Accepted changes show a brief green flash animation, then appear as normal text | P2 |
@@ -203,7 +206,7 @@ A web application where:
 ### 3.9 Sharing
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | SHR-1 | Every document has a shareable URL: `/d/{owner}/{repo}/{branch}/{...path}` | P0 |
 | SHR-2 | A "Share" button copies the URL to the clipboard with a confirmation toast | P0 |
 | SHR-3 | Anyone with a GitHub account who has read access to the repository can open the URL, view the document, and add comments | P0 |
@@ -212,7 +215,7 @@ A web application where:
 ### 3.10 Search & Filtering
 
 | ID | Requirement | Priority |
-|----|-------------|----------|
+| --- | --- | --- |
 | SRC-1 | A **command palette** (Cmd+K) provides quick access to: navigate to heading, search comments, switch mode, toggle sidebar | P1 |
 | SRC-2 | Comment sidebar supports filtering by: author, status (open/resolved), date range | P1 |
 | SRC-3 | Full-text search across comment bodies with highlighted results in the sidebar | P2 |
@@ -297,17 +300,17 @@ When a document is edited outside mdcolab (e.g., in VS Code), character offsets 
 ### 5.1 Performance
 
 | ID | Requirement | Target |
-|----|-------------|--------|
-| PERF-1 | Initial page load (document view) | < 2 seconds (LCP) |
-| PERF-2 | Time to interactive (editor ready) | < 3 seconds |
-| PERF-3 | Comment post latency (optimistic) | < 200ms perceived |
-| PERF-4 | Document save latency | < 2 seconds (GitHub API round-trip) |
-| PERF-5 | Support documents up to 100KB of markdown (~50 pages of prose) | No degradation |
+| --- | --- | --- |
+| PERF-1 | Initial page load (document view) | &lt; 2 seconds (LCP) |
+| PERF-2 | Time to interactive (editor ready) | &lt; 3 seconds |
+| PERF-3 | Comment post latency (optimistic) | &lt; 200ms perceived |
+| PERF-4 | Document save latency | &lt; 2 seconds (GitHub API round-trip) |
+| PERF-5 | Support documents up to 100KB of markdown (\~50 pages of prose) | No degradation |
 
 ### 5.2 Reliability
 
 | ID | Requirement |
-|----|-------------|
+| --- | --- |
 | REL-1 | Optimistic UI for all comment operations — UI updates immediately, reconciles with server response |
 | REL-2 | Auto-save with conflict detection and retry (no silent data loss) |
 | REL-3 | Graceful degradation when GitHub API is unavailable — show cached content with "offline" indicator |
@@ -316,7 +319,7 @@ When a document is edited outside mdcolab (e.g., in VS Code), character offsets 
 ### 5.3 Security
 
 | ID | Requirement |
-|----|-------------|
+| --- | --- |
 | SEC-1 | GitHub OAuth tokens stored server-side in encrypted sessions (never exposed to client) |
 | SEC-2 | All API routes validate session authentication |
 | SEC-3 | Users can only access repositories they have permission to view on GitHub |
@@ -326,7 +329,7 @@ When a document is edited outside mdcolab (e.g., in VS Code), character offsets 
 ### 5.4 Accessibility
 
 | ID | Requirement |
-|----|-------------|
+| --- | --- |
 | A11Y-1 | All interactive elements are keyboard-navigable |
 | A11Y-2 | Comment sidebar is navigable via keyboard (Tab, Arrow keys, Enter) |
 | A11Y-3 | Color contrast meets WCAG 2.1 AA standards in both light and dark mode |
@@ -336,7 +339,7 @@ When a document is edited outside mdcolab (e.g., in VS Code), character offsets 
 ### 5.5 Browser Support
 
 | Browser | Version |
-|---------|---------|
+| --- | --- |
 | Chrome | Latest 2 versions |
 | Firefox | Latest 2 versions |
 | Safari | Latest 2 versions |
@@ -365,7 +368,7 @@ When a document is edited outside mdcolab (e.g., in VS Code), character offsets 
 #### Dark Mode (Primary)
 
 | Token | Value | Usage |
-|-------|-------|-------|
+| --- | --- | --- |
 | `--bg` | `hsl(222, 47%, 6%)` | Page background |
 | `--surface` | `hsl(222, 35%, 10%)` | Card/panel backgrounds |
 | `--surface-hover` | `hsl(222, 30%, 14%)` | Hover and active states |
@@ -416,7 +419,7 @@ Inverted luminance values with the same hue palette. Accent colors remain consis
 ### 6.5 Key Interactions
 
 | Interaction | Behavior |
-|-------------|----------|
+| --- | --- |
 | Select text in document | Bubble toolbar appears above selection with: Bold, Italic, Code, Link, Highlight, **Comment**, Suggest Edit |
 | Click "Comment" in toolbar | Sidebar scrolls to a new empty thread card; text gets yellow highlight; cursor focuses in comment input |
 | Post a comment | Comment appears in thread; highlight becomes permanent; toast confirms "Comment added" |
@@ -436,7 +439,7 @@ Inverted luminance values with the same hue palette. Accent colors remain consis
 ### 7.1 Stack
 
 | Component | Technology | Rationale |
-|-----------|-----------|-----------|
+| --- | --- | --- |
 | Framework | Next.js 14+ (App Router), TypeScript | SSR for initial load, API routes for backend, server components |
 | Editor | Tiptap 2 (ProseMirror-based) | Headless WYSIWYG, custom marks for comments, extensions for slash commands, markdown serialization |
 | Markdown serialization | `tiptap-markdown` + custom serializers | Clean round-trip: markdown → Tiptap JSON → markdown |
@@ -487,17 +490,22 @@ Browser (Client)
 ### 7.3 Key Technical Decisions
 
 #### Tiptap as the Unified Core
+
 Using Tiptap for both viewing (read-only) and editing eliminates the need for two separate rendering paths. View mode is simply `editor.setEditable(false)`. Comment marks work identically in both modes. ProseMirror's position mapping system keeps comment anchors stable during editing — when text is inserted before a comment mark, the mark's position adjusts automatically.
 
 #### No Database
+
 All persistent state lives in the GitHub repository as files. This means:
+
 - Zero infrastructure beyond the web app itself
 - Comments are version-controlled alongside the document
 - No data migration, no database management, no backup strategy needed
 - Trade-off: no real-time push updates (polling or manual refresh for now)
 
 #### Sidecar JSON vs. PR Comments
+
 We chose sidecar JSON files over GitHub PR review comments because:
+
 - PR comments are tied to the PR lifecycle (closed PR = hard to find comments)
 - PR comments are line-based, not text-selection-based
 - Sidecar files are permanent, portable, and independent of Git workflows
@@ -508,7 +516,7 @@ We chose sidecar JSON files over GitHub PR review comments because:
 ## 8. URL Routing
 
 | Route | Page | Auth Required |
-|-------|------|---------------|
+| --- | --- | --- |
 | `/` | Landing page (marketing) | No |
 | `/auth/signin` | GitHub OAuth sign-in | No |
 | `/auth/callback` | OAuth callback handler | No |
@@ -522,32 +530,32 @@ We chose sidecar JSON files over GitHub PR review comments because:
 ## 9. Success Metrics
 
 | Metric | Target | Measurement |
-|--------|--------|-------------|
-| Time to first comment | < 30 seconds from opening a shared URL | Analytics event tracking |
+| --- | --- | --- |
+| Time to first comment | &lt; 30 seconds from opening a shared URL | Analytics event tracking |
 | Markdown round-trip fidelity | 100% for standard GFM documents | Automated test suite |
-| Editor responsiveness | < 50ms input latency | Lighthouse / real-user monitoring |
-| Comment anchor accuracy | > 95% correct re-anchoring after external edits | Automated test + manual QA |
-| User retention | > 40% weekly return rate | Analytics |
+| Editor responsiveness | &lt; 50ms input latency | Lighthouse / real-user monitoring |
+| Comment anchor accuracy | &gt; 95% correct re-anchoring after external edits | Automated test + manual QA |
+| User retention | &gt; 40% weekly return rate | Analytics |
 
 ---
 
 ## 10. Risks & Mitigations
 
 | Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
+| --- | --- | --- | --- |
 | Markdown round-trip introduces formatting drift | High — data corruption | Medium | Comprehensive test suite with 50+ markdown documents. Diff on every save to detect drift. |
 | GitHub API rate limits (5,000/hr) exceeded by heavy users | Medium — degraded experience | Medium | Aggressive caching (TanStack Query), conditional requests (ETags), debounced writes. Show rate limit to user. |
 | Concurrent comment writes cause data loss | High — user frustration | Low | SHA-based optimistic concurrency, UUID-based merge, automatic retry with user notification. |
 | Comment anchors break after large document restructuring | Medium — orphaned comments | Medium | Fuzzy re-anchoring with selectedText + context. Orphaned comments UI. "Re-anchor" manual action. |
 | Tiptap markdown serializer doesn't handle edge cases | High — garbled output | Medium | Custom serializer overrides. Extensive test coverage. User can view raw markdown before saving. |
-| Performance degrades on very large documents (>100KB) | Medium — slow editor | Low | Virtual scrolling for long docs. Warn on large files. Lazy-load comment sidebar. |
+| Performance degrades on very large documents (&gt;100KB) | Medium — slow editor | Low | Virtual scrolling for long docs. Warn on large files. Lazy-load comment sidebar. |
 
 ---
 
 ## 11. Future Considerations (Out of Scope for v1)
 
 | Feature | Description |
-|---------|-------------|
+| --- | --- |
 | Real-time collaboration | Multiple cursors, live typing via Tiptap Collaboration (Hocuspocus server). Requires a WebSocket backend. |
 | GitLab/Bitbucket support | Abstract the Git provider layer to support other platforms. |
 | AI writing assistant | `/ai` slash commands for summarize, expand, rewrite, translate. Leverage LLM APIs. |
@@ -564,7 +572,7 @@ We chose sidecar JSON files over GitHub PR review comments because:
 ## 12. Glossary
 
 | Term | Definition |
-|------|-----------|
+| --- | --- |
 | **Sidecar file** | A companion file (e.g., `doc.md.comments.json`) stored alongside the markdown file in the same directory |
 | **Thread** | A comment and its replies, anchored to a specific text selection or the document as a whole |
 | **Anchor** | The text selection (or document reference) that a comment thread is attached to |
