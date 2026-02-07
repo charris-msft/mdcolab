@@ -1,0 +1,172 @@
+{
+  "name": "vscode-mdcolab",
+  "displayName": "mdcolab",
+  "description": "Collaborative markdown review with anchored comments via GitHub Issues",
+  "version": "0.1.0",
+  "publisher": "charris-msft",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./out/extension.js",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/charris-msft/mdcolab"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "mdcolab.addComment",
+        "title": "Add mdcolab Comment",
+        "category": "mdcolab",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "mdcolab.openInMdcolab",
+        "title": "Open in mdcolab",
+        "category": "mdcolab",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "mdcolab.shareLink",
+        "title": "Copy mdcolab Share Link",
+        "category": "mdcolab",
+        "icon": "$(link)"
+      },
+      {
+        "command": "mdcolab.refreshComments",
+        "title": "Refresh Comments",
+        "category": "mdcolab",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mdcolab.resolveThread",
+        "title": "Resolve Thread",
+        "category": "mdcolab",
+        "icon": "$(check)"
+      },
+      {
+        "command": "mdcolab.reopenThread",
+        "title": "Reopen Thread",
+        "category": "mdcolab",
+        "icon": "$(issue-reopened)"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "mdcolab.addComment",
+          "when": "editorHasSelection && resourceLangId == markdown",
+          "group": "mdcolab"
+        },
+        {
+          "command": "mdcolab.openInMdcolab",
+          "when": "resourceLangId == markdown",
+          "group": "mdcolab"
+        },
+        {
+          "command": "mdcolab.shareLink",
+          "when": "resourceLangId == markdown",
+          "group": "mdcolab"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "mdcolab.refreshComments",
+          "when": "resourceLangId == markdown",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "mdcolab.refreshComments",
+          "when": "view == mdcolab.commentsView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "mdcolab.resolveThread",
+          "when": "view == mdcolab.commentsView && viewItem == openThread",
+          "group": "inline"
+        },
+        {
+          "command": "mdcolab.reopenThread",
+          "when": "view == mdcolab.commentsView && viewItem == resolvedThread",
+          "group": "inline"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mdcolab",
+          "title": "mdcolab",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "views": {
+      "mdcolab": [
+        {
+          "id": "mdcolab.commentsView",
+          "name": "Comments",
+          "when": "resourceLangId == markdown || mdcolab.hasComments"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "mdcolab.addComment",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m",
+        "when": "editorHasSelection && resourceLangId == markdown"
+      }
+    ],
+    "configuration": {
+      "title": "mdcolab",
+      "properties": {
+        "mdcolab.webAppUrl": {
+          "type": "string",
+          "default": "https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io",
+          "description": "Base URL for the mdcolab web application"
+        },
+        "mdcolab.autoRefreshInterval": {
+          "type": "number",
+          "default": 30,
+          "description": "Auto-refresh interval for comments in seconds (0 to disable)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src",
+    "test": "node ./out/test/runTest.js",
+    "test:unit": "tsc -p ./ && node ./out/test/run-unit-tests.js",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^20.0.0",
+    "@types/sinon": "^21.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.4.0",
+    "@vscode/vsce": "^3.0.0",
+    "glob": "^11.0.0",
+    "mocha": "^10.8.0",
+    "sinon": "^21.0.1",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@octokit/rest": "^20.1.2"
+  }
+}
