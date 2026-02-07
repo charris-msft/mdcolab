@@ -17,6 +17,10 @@ export const metadata: Metadata = {
   title: "mdcolab — Collaborative Markdown Review",
   description:
     "Share markdown files from GitHub repos. Add Word-style comments. Edit with a premium WYSIWYG editor. All version-controlled.",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/favicon.png",
+  },
 };
 
 export default function RootLayout({

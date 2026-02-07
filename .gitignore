@@ -48,3 +48,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 *.png
+!logo.png
+!public/favicon.png
+!src/app/icon.png

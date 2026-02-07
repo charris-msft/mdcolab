@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 
 export function Hero() {
   return (
-    <section className="relative flex min-h-[85vh] items-center justify-center overflow-hidden px-6">
+    <section className="relative flex min-h-[76vh] items-center justify-center overflow-hidden px-6">
       {/* Animated gradient orb */}
       <motion.div
         className="pointer-events-none absolute h-[500px] w-[500px] rounded-full opacity-40 blur-[120px]"
@@ -49,7 +49,7 @@ export function Hero() {
         </motion.p>
 
         <motion.div
-          className="mt-10"
+          className="mt-8"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3, ease: "easeOut" }}
