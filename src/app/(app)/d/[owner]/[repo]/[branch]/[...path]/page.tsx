@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useEditorStore } from "@/stores/editor-store";
 import { useCommentStore } from "@/stores/comment-store";
@@ -23,7 +24,7 @@ import {
   GitCompare,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommentSidebar } from "@/components/comments/comment-sidebar";
 import {
   Sheet,
@@ -56,6 +57,12 @@ export default function DocumentPage() {
   const fileName = params.path[params.path.length - 1];
 
   const [editMode, setEditMode] = useState(false);
+  const { data: session } = useSession();
+  const sessionAny = session as unknown as Record<string, unknown> | null;
+  const author = {
+    login: (sessionAny?.login as string) ?? session?.user?.name ?? "anonymous",
+    avatarUrl: session?.user?.image ?? "",
+  };
   const { isDirty, isSaving, setDirty, setSaving, setFilePath, setFileSha, fileSha, showTrackChanges } =
     useEditorStore();
   const { threads, isSidebarOpen, setSidebarOpen } = useCommentStore();
@@ -69,29 +76,13 @@ export default function DocumentPage() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  // Load & auto-save comments
-  const { saveComments, isSaving: isCommentSaving } = useComments({
+  // Load comments via GitHub Issues
+  useComments({
     owner,
     repo,
     branch,
     path: filePath,
   });
-
-  // Track previous threads to detect changes
-  const prevThreadsRef = useRef<string>("");
-  const initialLoadRef = useRef(true);
-  useEffect(() => {
-    const serialized = JSON.stringify(threads);
-    if (initialLoadRef.current) {
-      initialLoadRef.current = false;
-      prevThreadsRef.current = serialized;
-      return;
-    }
-    if (serialized !== prevThreadsRef.current) {
-      prevThreadsRef.current = serialized;
-      saveComments(threads);
-    }
-  }, [threads, saveComments]);
 
   // Comment navigation
   const { goToNext: nextComment, goToPrevious: prevComment } = useCommentNavigation();
@@ -408,6 +399,7 @@ export default function DocumentPage() {
             editable={canEdit && editMode}
             onSave={handleSave}
             className="flex flex-col h-full"
+            author={author}
           />
         </div>
 

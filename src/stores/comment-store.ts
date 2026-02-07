@@ -7,7 +7,6 @@ interface CommentState {
   threads: CommentThread[];
   activeThreadId: string | null;
   filterStatus: FilterStatus;
-  commentsSha: string | null;
   isSidebarOpen: boolean;
   searchQuery: string;
   authorFilter: string[];
@@ -19,7 +18,6 @@ interface CommentState {
   removeThread: (id: string) => void;
   setActiveThread: (id: string | null) => void;
   setFilterStatus: (status: FilterStatus) => void;
-  setCommentsSha: (sha: string | null) => void;
   setSidebarOpen: (open: boolean) => void;
   setSearchQuery: (query: string) => void;
   setAuthorFilter: (authors: string[]) => void;
@@ -30,7 +28,6 @@ export const useCommentStore = create<CommentState>((set) => ({
   threads: [],
   activeThreadId: null,
   filterStatus: "open",
-  commentsSha: null,
   isSidebarOpen: true,
   searchQuery: "",
   authorFilter: [],
@@ -58,7 +55,6 @@ export const useCommentStore = create<CommentState>((set) => ({
     })),
   setActiveThread: (id) => set({ activeThreadId: id }),
   setFilterStatus: (status) => set({ filterStatus: status }),
-  setCommentsSha: (sha) => set({ commentsSha: sha }),
   setSidebarOpen: (open) => set({ isSidebarOpen: open }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setAuthorFilter: (authors) => set({ authorFilter: authors }),

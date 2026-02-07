@@ -16,14 +16,16 @@ import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { common, createLowlight } from "lowlight";
 import { Markdown } from "tiptap-markdown";
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import { useEditorStore } from "@/stores/editor-store";
 import { useCommentCreation } from "@/hooks/use-comment-creation";
+import { useCommentAnchors } from "@/hooks/use-comment-anchors";
 import { EditorToolbar } from "./editor-toolbar";
 import { BubbleToolbar } from "./bubble-toolbar";
 import { SlashCommands } from "./slash-commands";
 import { CodeBlockComponent } from "./code-block-component";
 import { CommentMark } from "./extensions/comment-mark";
+import { ReviewSelectionToolbar } from "./review-selection-toolbar";
 import "@/components/editor/editor-styles.css";
 
 const lowlight = createLowlight(common);
@@ -33,6 +35,7 @@ interface DocumentEditorProps {
   editable?: boolean;
   onSave?: (markdown: string) => void;
   className?: string;
+  author?: { login: string; avatarUrl: string };
 }
 
 export function DocumentEditor({
@@ -40,9 +43,9 @@ export function DocumentEditor({
   editable = false,
   onSave,
   className,
+  author,
 }: DocumentEditorProps) {
   const { isDirty, setDirty, setContent, setEditable } = useEditorStore();
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -106,23 +109,18 @@ export function DocumentEditor({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const markdown = (editor.storage as any).markdown.getMarkdown() as string;
       setContent(markdown);
-
-      // Auto-save debounce (3 seconds)
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      saveTimeoutRef.current = setTimeout(() => {
-        onSave?.(markdown);
-      }, 3000);
     },
   });
 
   // Comment creation hook
   const { createComment } = useCommentCreation(editor);
-  const placeholderAuthor = { login: "user", avatarUrl: "" };
+  const commentAuthor = author ?? { login: "anonymous", avatarUrl: "" };
   const handleCreateComment = useCallback(() => {
-    createComment(placeholderAuthor);
-  }, [createComment]);
+    createComment(commentAuthor);
+  }, [createComment, commentAuthor]);
+
+  // Apply comment marks and handle click-to-scroll
+  useCommentAnchors(editor);
 
   // Sync editable state
   useEffect(() => {
@@ -152,15 +150,6 @@ export function DocumentEditor({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [editor, isDirty, onSave, handleCreateComment]);
 
-  // Cleanup auto-save timeout
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, []);
-
   if (!editor) {
     return (
       <div className="animate-pulse px-4 py-8 mx-auto max-w-[720px]">
@@ -175,7 +164,8 @@ export function DocumentEditor({
   return (
     <div className={className}>
       {editable && <EditorToolbar editor={editor} />}
-      {editable && <BubbleToolbar editor={editor} onCreateComment={handleCreateComment} />}
+      {editable && <BubbleToolbar editor={editor} editable={editable} onCreateComment={handleCreateComment} />}
+      {!editable && <ReviewSelectionToolbar editor={editor} onCreateComment={handleCreateComment} />}
       <CodeBlockComponent editor={editor} />
       <EditorContent editor={editor} />
     </div>

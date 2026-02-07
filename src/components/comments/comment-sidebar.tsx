@@ -27,6 +27,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useParams } from "next/navigation";
+import { useComments } from "@/hooks/use-comments";
 
 type FilterStatus = "open" | "resolved" | "all";
 
@@ -37,6 +39,16 @@ const filterLabels: Record<FilterStatus, string> = {
 };
 
 export function CommentSidebar() {
+  const params = useParams<{ owner: string; repo: string; branch: string; path: string[] }>();
+  const filePath = params.path?.join("/") ?? "";
+
+  const { replyToThread, resolveThread, reopenThread, createThread } = useComments({
+    owner: params.owner,
+    repo: params.repo,
+    branch: params.branch,
+    path: filePath,
+  });
+
   const {
     threads,
     activeThreadId,
@@ -93,36 +105,36 @@ export function CommentSidebar() {
 
   const handleReply = useCallback(
     (threadId: string, body: string) => {
-      const thread = threads.find((t) => t.id === threadId);
-      if (!thread) return;
-      const newComment = {
-        id: `comment-${Date.now()}`,
-        author: { login: "you", avatarUrl: "" },
-        body,
-        mentions: [],
-        suggestedEdit: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: null,
-      };
-      updateThread(threadId, {
-        comments: [...thread.comments, newComment],
-      });
+      // If threadId is not a number, it's an unpersisted thread (UUID from editor mark).
+      // Create the Issue first, then the first comment body is the thread body.
+      const isUnpersisted = isNaN(Number(threadId));
+      if (isUnpersisted) {
+        const thread = threads.find((t) => t.id === threadId);
+        if (!thread) return;
+        createThread(thread.anchor, body);
+        // Remove the local-only placeholder thread
+        useCommentStore.getState().removeThread(threadId);
+      } else {
+        replyToThread(threadId, body);
+      }
     },
-    [threads, updateThread]
+    [replyToThread, createThread, threads]
   );
 
   const handleResolve = useCallback(
     (threadId: string) => {
-      updateThread(threadId, { status: "resolved" });
+      if (isNaN(Number(threadId))) return; // Can't resolve unpersisted threads
+      resolveThread(threadId);
     },
-    [updateThread]
+    [resolveThread]
   );
 
   const handleReopen = useCallback(
     (threadId: string) => {
-      updateThread(threadId, { status: "open" });
+      if (isNaN(Number(threadId))) return;
+      reopenThread(threadId);
     },
-    [updateThread]
+    [reopenThread]
   );
 
   const handleAcceptSuggestion = useCallback(
@@ -172,33 +184,17 @@ export function CommentSidebar() {
   const handleAddDocComment = useCallback(() => {
     const trimmed = docCommentBody.trim();
     if (!trimmed) return;
-    const threadId = `thread-${Date.now()}`;
-    const commentId = `comment-${Date.now()}`;
-    const thread = {
-      id: threadId,
-      status: "open" as const,
-      anchor: {
-        type: "document" as const,
+    createThread(
+      {
+        type: "document",
         selectedText: "",
         context: { before: "", after: "" },
       },
-      comments: [
-        {
-          id: commentId,
-          author: { login: "you", avatarUrl: "" },
-          body: trimmed,
-          mentions: [],
-          suggestedEdit: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: null,
-        },
-      ],
-    };
-    useCommentStore.getState().addThread(thread);
-    setActiveThread(threadId);
+      trimmed
+    );
     setDocCommentBody("");
     setShowDocInput(false);
-  }, [docCommentBody, setActiveThread]);
+  }, [docCommentBody, createThread]);
 
   const handleSelect = useCallback(
     (threadId: string) => {

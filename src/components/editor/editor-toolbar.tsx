@@ -37,7 +37,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
   if (!editor) return null;
 
   return (
-    <div className="flex items-center gap-0.5 flex-wrap p-2 border-b border-border bg-card/50 sticky top-0 z-10 backdrop-blur-sm overflow-x-auto toolbar">
+    <div className="flex items-center gap-0.5 flex-wrap p-2 border-b border-border sticky top-0 z-10 overflow-x-auto toolbar" style={{ backgroundColor: 'hsl(222 35% 10%)', color: 'hsl(210 40% 96%)' }}>
       {/* Undo/Redo */}
       <Button
         variant="ghost"
