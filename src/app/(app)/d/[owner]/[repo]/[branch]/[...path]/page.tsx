@@ -30,6 +30,12 @@ import {
   SheetContent,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useComments } from "@/hooks/use-comments";
 import { useKeyboardShortcuts, SHORTCUTS } from "@/hooks/use-keyboard-shortcuts";
 import { useCommentNavigation } from "@/hooks/use-comment-navigation";
@@ -53,6 +59,15 @@ export default function DocumentPage() {
   const { isDirty, isSaving, setDirty, setSaving, setFilePath, setFileSha, fileSha, showTrackChanges } =
     useEditorStore();
   const { threads, isSidebarOpen, setSidebarOpen } = useCommentStore();
+
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   // Load & auto-save comments
   const { saveComments, isSaving: isCommentSaving } = useComments({
@@ -210,6 +225,7 @@ export default function DocumentPage() {
   }
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div className="flex flex-col h-[calc(100vh-3.5rem)] -mx-4 sm:-mx-6 lg:-mx-8 -my-8">
       {/* Toolbar Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-2 gap-2 flex-wrap">
@@ -220,13 +236,34 @@ export default function DocumentPage() {
             </Link>
           </Button>
           <nav className="flex items-center gap-1 text-sm text-muted-foreground truncate">
-            <span className="font-medium text-foreground">{owner}</span>
+            <Link href={`/repos/${owner}/${repo}`} className="font-medium text-foreground hover:text-primary transition-colors">
+              {owner}
+            </Link>
             <span>/</span>
-            <span className="font-medium text-foreground">{repo}</span>
+            <Link href={`/repos/${owner}/${repo}`} className="font-medium text-foreground hover:text-primary transition-colors">
+              {repo}
+            </Link>
             <span>/</span>
             <span>{branch}</span>
-            <span>/</span>
-            <span className="text-foreground truncate">{filePath}</span>
+            {params.path.map((segment, i) => {
+              const isLast = i === params.path.length - 1;
+              const folderPath = params.path.slice(0, i + 1).join("/");
+              return (
+                <span key={i} className="flex items-center gap-1">
+                  <span>/</span>
+                  {isLast ? (
+                    <span className="text-foreground truncate">{segment}</span>
+                  ) : (
+                    <Link
+                      href={`/repos/${owner}/${repo}?path=${folderPath}`}
+                      className="hover:text-primary transition-colors"
+                    >
+                      {segment}
+                    </Link>
+                  )}
+                </span>
+              );
+            })}
           </nav>
         </div>
 
@@ -234,65 +271,90 @@ export default function DocumentPage() {
           {/* Edit / Review toggle */}
           {canEdit && (
             <div className="flex items-center rounded-md border border-border">
-              <Button
-                variant={editMode ? "default" : "ghost"}
-                size="sm"
-                className="rounded-r-none gap-1.5"
-                onClick={() => setEditMode(true)}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Edit
-              </Button>
-              <Button
-                variant={!editMode ? "default" : "ghost"}
-                size="sm"
-                className="rounded-l-none gap-1.5"
-                onClick={() => setEditMode(false)}
-              >
-                <Eye className="h-3.5 w-3.5" />
-                Review
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={editMode ? "default" : "ghost"}
+                    size="sm"
+                    className="rounded-r-none gap-1.5"
+                    onClick={() => setEditMode(true)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Edit document</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={!editMode ? "default" : "ghost"}
+                    size="sm"
+                    className="rounded-l-none gap-1.5"
+                    onClick={() => setEditMode(false)}
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    Review
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Review & comment</TooltipContent>
+              </Tooltip>
             </div>
           )}
 
           <Separator orientation="vertical" className="h-6" />
 
           {/* Share */}
-          <Button variant="ghost" size="sm" className="gap-1.5" onClick={handleShare}>
-            <Share2 className="h-4 w-4" />
-            Share
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-1.5" onClick={handleShare}>
+                <Share2 className="h-4 w-4" />
+                Share
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Copy link to clipboard</TooltipContent>
+          </Tooltip>
 
           {/* Track Changes */}
           <TrackChangesToggle />
 
           {/* Comment count */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setSidebarOpen(!isSidebarOpen)}
-          >
-            <MessageSquare className="h-4 w-4" />
-            {openThreadCount > 0 && (
-              <Badge variant="secondary" className="px-1.5 py-0 text-xs">
-                {openThreadCount}
-              </Badge>
-            )}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setSidebarOpen(!isSidebarOpen)}
+              >
+                <MessageSquare className="h-4 w-4" />
+                {openThreadCount > 0 && (
+                  <Badge variant="secondary" className="px-1.5 py-0 text-xs">
+                    {openThreadCount}
+                  </Badge>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Comments</TooltipContent>
+          </Tooltip>
 
           {/* Sidebar toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSidebarOpen(!isSidebarOpen)}
-          >
-            {isSidebarOpen ? (
-              <PanelRightClose className="h-4 w-4" />
-            ) : (
-              <PanelRightOpen className="h-4 w-4" />
-            )}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSidebarOpen(!isSidebarOpen)}
+              >
+                {isSidebarOpen ? (
+                  <PanelRightClose className="h-4 w-4" />
+                ) : (
+                  <PanelRightOpen className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{isSidebarOpen ? "Close sidebar" : "Open sidebar"}</TooltipContent>
+          </Tooltip>
 
           <Separator orientation="vertical" className="h-6" />
 
@@ -318,16 +380,21 @@ export default function DocumentPage() {
 
           {/* Manual save button */}
           {canEdit && editMode && isDirty && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                const content = useEditorStore.getState().content;
-                handleSave(content);
-              }}
-            >
-              <Save className="h-4 w-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    const content = useEditorStore.getState().content;
+                    handleSave(content);
+                  }}
+                >
+                  <Save className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Save (Ctrl+S)</TooltipContent>
+            </Tooltip>
           )}
         </div>
       </div>
@@ -344,24 +411,26 @@ export default function DocumentPage() {
           />
         </div>
 
-        {/* Comment Sidebar — Desktop: side panel */}
-        {isSidebarOpen && (
-          <aside className="hidden md:block w-80 border-l border-border overflow-y-auto shrink-0 comment-sidebar">
+        {/* Comment Sidebar — Desktop: side panel, Mobile: bottom sheet */}
+        {isSidebarOpen && !isMobile && (
+          <aside className="w-80 border-l border-border overflow-y-auto shrink-0 comment-sidebar">
             {showTrackChanges ? <TrackChangesPanel /> : <CommentSidebar />}
           </aside>
         )}
 
-        {/* Comment Sidebar — Mobile: bottom sheet */}
-        <Sheet
-          open={isSidebarOpen}
-          onOpenChange={(open) => setSidebarOpen(open)}
-        >
-          <SheetContent side="bottom" className="md:hidden h-[70vh]" showCloseButton={false}>
-            <SheetTitle className="sr-only">Comments</SheetTitle>
-            {showTrackChanges ? <TrackChangesPanel /> : <CommentSidebar />}
-          </SheetContent>
-        </Sheet>
+        {isMobile && (
+          <Sheet
+            open={isSidebarOpen}
+            onOpenChange={(open) => setSidebarOpen(open)}
+          >
+            <SheetContent side="bottom" className="h-[70vh]" showCloseButton={false}>
+              <SheetTitle className="sr-only">Comments</SheetTitle>
+              {showTrackChanges ? <TrackChangesPanel /> : <CommentSidebar />}
+            </SheetContent>
+          </Sheet>
+        )}
       </div>
     </div>
+    </TooltipProvider>
   );
 }

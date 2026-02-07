@@ -9,7 +9,20 @@ export async function GET(
   try {
     const { owner, repo } = await params;
     const session = await auth();
-    const username = session?.user?.name || session?.user?.email;
+    const sessionAny = session as unknown as Record<string, unknown>;
+    let username = sessionAny?.login as string | undefined;
+
+    if (!username) {
+      // Fall back: get login from GitHub API
+      try {
+        const octokit = await getOctokit();
+        const { data: user } = await octokit.users.getAuthenticated();
+        username = user.login;
+      } catch {
+        return NextResponse.json({ permission: "read" as const, canEdit: false });
+      }
+    }
+
     if (!username) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
