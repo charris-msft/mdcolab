@@ -19,7 +19,7 @@ export function useComments({ owner, repo, branch, path }: UseCommentsOptions) {
   const apiBase = `/api/comments/${owner}/${repo}/${branch}/${path}`;
 
   // Load comments from GitHub Issues
-  const { isLoading, error } = useQuery({
+  const { isLoading, error, data } = useQuery({
     queryKey: ["comments", owner, repo, branch, path],
     queryFn: async () => {
       const res = await fetch(apiBase);
@@ -27,15 +27,15 @@ export function useComments({ owner, repo, branch, path }: UseCommentsOptions) {
       return res.json() as Promise<{ threads: CommentThread[] }>;
     },
     select: (data) => data.threads,
+    refetchInterval: 5000,
   });
 
   // Sync loaded data to store
-  const queryData = queryClient.getQueryData<{ threads: CommentThread[] }>(["comments", owner, repo, branch, path]);
   useEffect(() => {
-    if (queryData) {
-      setThreads(queryData.threads);
+    if (data) {
+      setThreads(data);
     }
-  }, [queryData, setThreads]);
+  }, [data, setThreads]);
 
   // Create thread mutation
   const createThreadMutation = useMutation({

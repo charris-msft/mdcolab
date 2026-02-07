@@ -126,15 +126,16 @@ export async function GET(
     const filePath = pathSegments.join("/");
     const octokit = await getOctokit();
 
-    // Fetch all mdcolab issues (open + closed)
+    // Fetch all mdcolab issues for this file path (open + closed)
     const issues: GitHubIssue[] = [];
+    const pathLabel = `path:${filePath}`;
     for (const state of ["open", "closed"] as const) {
       let page = 1;
       while (true) {
         const { data } = await octokit.issues.listForRepo({
           owner,
           repo,
-          labels: LABEL,
+          labels: `${LABEL},${pathLabel}`,
           state,
           per_page: 100,
           page,
@@ -146,11 +147,8 @@ export async function GET(
       }
     }
 
-    // Filter to issues for this file
-    const fileIssues = issues.filter((issue) => {
-      const meta = parseMetadata(issue.body ?? "");
-      return meta?.file === filePath;
-    });
+    // For issues with the path label, no need to filter client-side
+    const fileIssues = issues;
 
     // Fetch comments for each issue in parallel
     const threads: CommentThread[] = [];
@@ -204,10 +202,16 @@ export async function POST(
 
       // Ensure file-specific label exists
       const fileLabel = `file:${filePath}`;
+      const pathLabel = `path:${filePath}`;
       try {
         await octokit.issues.getLabel({ owner, repo, name: fileLabel });
       } catch {
         await octokit.issues.createLabel({ owner, repo, name: fileLabel, color: "0E8A16", description: `mdcolab comments for ${filePath}` });
+      }
+      try {
+        await octokit.issues.getLabel({ owner, repo, name: pathLabel });
+      } catch {
+        await octokit.issues.createLabel({ owner, repo, name: pathLabel, color: "0E8A16", description: `mdcolab path ${filePath}` });
       }
 
       const selectedText = anchor.selectedText || "General comment";
@@ -219,7 +223,7 @@ export async function POST(
         repo,
         title,
         body: buildIssueBody(anchor, commentBody, filePath),
-        labels: [LABEL, fileLabel],
+        labels: [LABEL, fileLabel, pathLabel],
       });
 
       const thread: CommentThread = {

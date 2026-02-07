@@ -76,6 +76,12 @@ export default function DocumentPage() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  // Dynamic page title
+  useEffect(() => {
+    document.title = `mdcolab — ${fileName}`;
+    return () => { document.title = "mdcolab — Collaborative Markdown Review"; };
+  }, [fileName]);
+
   // Load comments via GitHub Issues
   useComments({
     owner,
@@ -330,7 +336,7 @@ export default function DocumentPage() {
           </Tooltip>
 
           {/* Track Changes */}
-          <TrackChangesToggle />
+          {canEdit && <TrackChangesToggle />}
 
           {/* Comment count */}
           <Tooltip>
@@ -375,9 +381,10 @@ export default function DocumentPage() {
             <TooltipContent>{isSidebarOpen ? "Close sidebar" : "Open sidebar"}</TooltipContent>
           </Tooltip>
 
-          <Separator orientation="vertical" className="h-6" />
+          {canEdit && <Separator orientation="vertical" className="h-6" />}
 
           {/* Save indicator */}
+          {canEdit && (
           <div className="flex items-center gap-1.5 text-sm">
             {isSaving ? (
               <>
@@ -396,6 +403,7 @@ export default function DocumentPage() {
               </>
             )}
           </div>
+          )}
 
           {/* Manual save button */}
           {canEdit && editMode && isDirty && (

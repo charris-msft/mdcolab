@@ -172,6 +172,7 @@ export function CommentThreadCard({
               onSubmit={handleReply}
               onCancel={() => setShowReplyInput(false)}
               submitLabel={thread.comments.length === 0 ? "Comment" : "Reply"}
+              autoFocus={autoReply}
             />
           </div>
         )}
