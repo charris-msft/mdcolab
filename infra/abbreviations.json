@@ -1,0 +1,11 @@
+{
+  "resourcesResourceGroups": "rg-",
+  "operationalInsightsWorkspaces": "log-",
+  "insightsComponents": "appi-",
+  "webServerFarms": "plan-",
+  "webSitesAppService": "app-",
+  "containerRegistryRegistries": "cr",
+  "appManagedEnvironments": "cae-",
+  "appContainerApps": "ca-",
+  "managedIdentityUserAssignedIdentities": "id-"
+}

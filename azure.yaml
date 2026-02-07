@@ -1,0 +1,10 @@
+name: mdcolab
+metadata:
+  template: mdcolab
+services:
+  web:
+    project: .
+    language: js
+    host: containerapp
+    docker:
+      path: Dockerfile

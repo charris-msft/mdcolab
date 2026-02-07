@@ -1,0 +1,309 @@
+/* Tiptap Editor Prose Styles — Premium typography for markdown documents */
+.prose-editor {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 1rem;
+  line-height: 1.75;
+  color: hsl(var(--foreground));
+}
+
+/* Headings */
+.prose-editor h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  letter-spacing: -0.025em;
+}
+
+.prose-editor h2 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.02em;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.prose-editor h3 {
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-editor h4 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-editor h5,
+.prose-editor h6 {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Paragraphs */
+.prose-editor p {
+  margin-bottom: 1rem;
+}
+
+.prose-editor > *:first-child {
+  margin-top: 0;
+}
+
+/* Links */
+.prose-editor a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  transition: color 0.15s ease;
+}
+
+.prose-editor a:hover {
+  color: hsl(250 80% 72%);
+}
+
+/* Bold, italic */
+.prose-editor strong {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.prose-editor em {
+  font-style: italic;
+}
+
+/* Inline code */
+.prose-editor code {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.875em;
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  padding: 0.15em 0.4em;
+  border-radius: 0.25rem;
+  font-weight: 500;
+}
+
+/* Code blocks */
+.prose-editor pre {
+  position: relative;
+  background-color: hsl(222 47% 4%);
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  padding: 1.75rem 1.25rem 1rem;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+/* Code block language label */
+.prose-editor pre::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  font-size: 0.7rem;
+  color: hsl(210 20% 50%);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: var(--font-mono), monospace;
+  pointer-events: none;
+}
+
+/* Code block copy button */
+.prose-editor pre .code-block-copy-btn {
+  position: absolute;
+  top: 0.4rem;
+  right: 4rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+  color: hsl(210 20% 60%);
+  background: hsl(222 47% 10%);
+  border: 1px solid hsl(222 20% 20%);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  font-family: var(--font-mono), monospace;
+  z-index: 1;
+}
+
+.prose-editor pre:hover .code-block-copy-btn {
+  opacity: 1;
+}
+
+.prose-editor pre .code-block-copy-btn:hover {
+  color: hsl(210 40% 90%);
+  background: hsl(222 47% 15%);
+}
+
+/* Line numbers via CSS counter */
+.prose-editor pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  color: hsl(210 40% 90%);
+  font-weight: 400;
+  counter-reset: line;
+}
+
+.prose-editor pre code .hljs-ln-line {
+  counter-increment: line;
+}
+
+.prose-editor pre code .hljs-ln-line::before {
+  content: counter(line);
+  display: inline-block;
+  width: 2rem;
+  margin-right: 1rem;
+  text-align: right;
+  color: hsl(210 15% 30%);
+  user-select: none;
+}
+
+/* Blockquotes */
+.prose-editor blockquote {
+  border-left: 3px solid hsl(var(--primary));
+  padding-left: 1rem;
+  margin: 1.5rem 0;
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+.prose-editor blockquote p {
+  margin-bottom: 0.5rem;
+}
+
+/* Lists */
+.prose-editor ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 1rem 0;
+}
+
+.prose-editor ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin: 1rem 0;
+}
+
+.prose-editor li {
+  margin-bottom: 0.375rem;
+}
+
+.prose-editor li > ul,
+.prose-editor li > ol {
+  margin-top: 0.375rem;
+  margin-bottom: 0;
+}
+
+/* Task lists */
+.prose-editor ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.prose-editor ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.prose-editor ul[data-type="taskList"] li label {
+  margin-top: 0.25rem;
+}
+
+.prose-editor ul[data-type="taskList"] li input[type="checkbox"] {
+  accent-color: hsl(var(--primary));
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.3rem;
+  cursor: pointer;
+}
+
+/* Tables */
+.prose-editor table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.5rem 0;
+  font-size: 0.875rem;
+}
+
+.prose-editor th,
+.prose-editor td {
+  border: 1px solid hsl(var(--border));
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.prose-editor th {
+  background-color: hsl(var(--muted));
+  font-weight: 600;
+}
+
+.prose-editor tr:hover td {
+  background-color: hsl(var(--accent) / 0.5);
+}
+
+/* Selected table cell */
+.prose-editor .selectedCell {
+  background-color: hsl(var(--primary) / 0.1);
+}
+
+/* Horizontal rule */
+.prose-editor hr {
+  border: none;
+  border-top: 1px solid hsl(var(--border));
+  margin: 2rem 0;
+}
+
+/* Images */
+.prose-editor img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+/* Mark / Highlight */
+.prose-editor mark {
+  background-color: hsl(var(--comment-highlight));
+  border-bottom: 2px solid hsl(50 100% 60% / 0.4);
+  padding: 0.1em 0;
+}
+
+/* Placeholder */
+.prose-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+  height: 0;
+}
+
+/* Focus styles */
+.prose-editor:focus {
+  outline: none;
+}
+
+/* Gapcursor */
+.prose-editor .ProseMirror-gapcursor::after {
+  border-top: 1px solid hsl(var(--foreground));
+}
+
+/* Selection when not focused */
+.prose-editor .ProseMirror-selectednode {
+  outline: 2px solid hsl(var(--primary));
+  border-radius: 0.25rem;
+}
