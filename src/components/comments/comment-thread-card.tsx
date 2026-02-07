@@ -171,6 +171,7 @@ export function CommentThreadCard({
             <CommentReplyInput
               onSubmit={handleReply}
               onCancel={() => setShowReplyInput(false)}
+              submitLabel={thread.comments.length === 0 ? "Comment" : "Reply"}
             />
           </div>
         )}

@@ -278,6 +278,11 @@ export async function POST(
     if (error instanceof Error && error.message === "Not authenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+    if (typeof error === "object" && error !== null && "status" in error && (error as { status: number }).status === 410) {
+      return NextResponse.json({
+        error: "Issues are disabled for this repository. Enable them in Settings → Features → Issues.",
+      }, { status: 410 });
+    }
     console.error("POST comments error:", error);
     return NextResponse.json({ error: "Failed to save comment" }, { status: 500 });
   }

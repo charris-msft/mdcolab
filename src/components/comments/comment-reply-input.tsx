@@ -8,6 +8,7 @@ import { MentionInput } from "./mention-input";
 interface CommentReplyInputProps {
   authorAvatarUrl?: string;
   authorLogin?: string;
+  submitLabel?: string;
   onSubmit: (body: string, mentions?: string[]) => void;
   onCancel: () => void;
 }
@@ -15,6 +16,7 @@ interface CommentReplyInputProps {
 export function CommentReplyInput({
   authorAvatarUrl,
   authorLogin = "you",
+  submitLabel = "Reply",
   onSubmit,
   onCancel,
 }: CommentReplyInputProps) {
@@ -54,7 +56,7 @@ export function CommentReplyInput({
             Cancel
           </Button>
           <Button size="sm" onClick={handleSubmit} disabled={!body.trim()}>
-            Reply
+            {submitLabel}
           </Button>
         </div>
       </div>

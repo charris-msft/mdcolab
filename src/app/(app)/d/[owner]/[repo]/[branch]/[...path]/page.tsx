@@ -108,12 +108,13 @@ export default function DocumentPage() {
     queryKey: ["permission", owner, repo],
     queryFn: async () => {
       const res = await fetch(`/api/repos/${owner}/${repo}/permission`);
-      if (!res.ok) return { permission: "read" as const, canEdit: false };
-      return res.json() as Promise<{ permission: string; canEdit: boolean }>;
+      if (!res.ok) return { permission: "read" as const, canEdit: false, hasIssues: true };
+      return res.json() as Promise<{ permission: string; canEdit: boolean; hasIssues: boolean }>;
     },
   });
 
   const canEdit = permData?.canEdit ?? false;
+  const hasIssues = permData?.hasIssues ?? true;
 
   // Set file SHA when loaded
   useEffect(() => {
@@ -310,12 +311,22 @@ export default function DocumentPage() {
           {/* Share */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1.5" onClick={handleShare}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5"
+                onClick={handleShare}
+                disabled={!hasIssues}
+              >
                 <Share2 className="h-4 w-4" />
                 Share
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Copy link to clipboard</TooltipContent>
+            <TooltipContent>
+              {hasIssues
+                ? "Copy link to clipboard"
+                : "Enable Issues in repo settings to share"}
+            </TooltipContent>
           </Tooltip>
 
           {/* Track Changes */}
@@ -329,6 +340,7 @@ export default function DocumentPage() {
                 size="sm"
                 className="gap-1.5"
                 onClick={() => setSidebarOpen(!isSidebarOpen)}
+                disabled={!hasIssues}
               >
                 <MessageSquare className="h-4 w-4" />
                 {openThreadCount > 0 && (
@@ -338,7 +350,11 @@ export default function DocumentPage() {
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Comments</TooltipContent>
+            <TooltipContent>
+              {hasIssues
+                ? "Comments"
+                : "Enable Issues in repo settings to use comments"}
+            </TooltipContent>
           </Tooltip>
 
           {/* Sidebar toggle */}
@@ -418,7 +434,7 @@ export default function DocumentPage() {
         {/* Comment Sidebar — Desktop: side panel, Mobile: bottom sheet */}
         {isSidebarOpen && !isMobile && (
           <aside className="w-80 border-l border-border overflow-y-auto shrink-0 comment-sidebar">
-            {showTrackChanges ? <TrackChangesPanel /> : <CommentSidebar />}
+            {showTrackChanges ? <TrackChangesPanel /> : <CommentSidebar hasIssues={hasIssues} />}
           </aside>
         )}
 
@@ -429,7 +445,7 @@ export default function DocumentPage() {
           >
             <SheetContent side="bottom" className="h-[70vh]" showCloseButton={false}>
               <SheetTitle className="sr-only">Comments</SheetTitle>
-              {showTrackChanges ? <TrackChangesPanel /> : <CommentSidebar />}
+              {showTrackChanges ? <TrackChangesPanel /> : <CommentSidebar hasIssues={hasIssues} />}
             </SheetContent>
           </Sheet>
         )}

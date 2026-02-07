@@ -19,7 +19,7 @@ export async function GET(
         const { data: user } = await octokit.users.getAuthenticated();
         username = user.login;
       } catch {
-        return NextResponse.json({ permission: "read" as const, canEdit: false });
+        return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true });
       }
     }
 
@@ -30,20 +30,24 @@ export async function GET(
     const octokit = await getOctokit();
 
     try {
-      const { data } = await octokit.repos.getCollaboratorPermissionLevel({
-        owner,
-        repo,
-        username,
-      });
+      const [{ data }, { data: repoData }] = await Promise.all([
+        octokit.repos.getCollaboratorPermissionLevel({
+          owner,
+          repo,
+          username,
+        }),
+        octokit.repos.get({ owner, repo }),
+      ]);
 
       const permission = data.permission as "admin" | "write" | "read" | "none";
       return NextResponse.json({
         permission,
         canEdit: permission === "admin" || permission === "write",
+        hasIssues: repoData.has_issues,
       });
     } catch {
       // If we can't check permissions, assume read-only
-      return NextResponse.json({ permission: "read" as const, canEdit: false });
+      return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true });
     }
   } catch (error) {
     if (error instanceof Error && error.message === "Not authenticated") {

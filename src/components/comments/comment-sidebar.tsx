@@ -19,6 +19,7 @@ import {
   FileText,
   Plus,
   AlertTriangle,
+  Info,
 } from "lucide-react";
 import { useCommentNavigation } from "@/hooks/use-comment-navigation";
 import {
@@ -38,7 +39,7 @@ const filterLabels: Record<FilterStatus, string> = {
   all: "All",
 };
 
-export function CommentSidebar() {
+export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
   const params = useParams<{ owner: string; repo: string; branch: string; path: string[] }>();
   const filePath = params.path?.join("/") ?? "";
 
@@ -283,6 +284,19 @@ export function CommentSidebar() {
       <div className="pt-2">
         <CommentSearch />
       </div>
+
+      {/* Issues disabled banner */}
+      {!hasIssues && (
+        <div className="mx-3 mt-2 p-3 rounded-md border border-blue-500/30 bg-blue-500/5">
+          <div className="flex gap-2">
+            <Info className="size-4 text-blue-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground">
+              Comments require GitHub Issues to be enabled.{" "}
+              Go to your repo <strong>Settings → Features → Issues</strong> to enable.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Thread list */}
       <ScrollArea className="flex-1">
