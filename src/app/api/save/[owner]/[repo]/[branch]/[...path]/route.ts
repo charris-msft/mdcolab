@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { getOctokit } from "@/lib/github";
 
+function toBase64(str: string): string {
+  // Works in both Node.js and Edge runtime
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(str).toString("base64");
+  }
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ owner: string; repo: string; branch: string; path: string[] }> }
@@ -19,7 +27,7 @@ export async function PUT(
       repo,
       path: filePath,
       message: body.message || `Update ${filePath} via mdcolab`,
-      content: Buffer.from(body.content).toString("base64"),
+      content: toBase64(body.content),
       ...(body.sha ? { sha: body.sha } : {}),
       branch,
     });
@@ -32,6 +40,8 @@ export async function PUT(
     if (error instanceof Error && error.message === "Not authenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-    return NextResponse.json({ error: "Failed to save file" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Save file error:", message, error);
+    return NextResponse.json({ error: "Failed to save file", detail: message }, { status: 500 });
   }
 }

@@ -144,15 +144,27 @@ export default function DocumentPage() {
       setDirty(false);
       setSaving(false);
     },
-    onError: () => {
+    onError: (err) => {
       setSaving(false);
-      toast.error("Failed to save file");
+      const msg = err instanceof Error ? err.message : "Failed to save file";
+      toast.error(msg);
     },
   });
 
   const handleSave = useCallback(
     (markdown: string) => {
-      if (!canEdit || !fileSha) return;
+      if (!canEdit) {
+        toast.error("You don't have write access to this file");
+        return;
+      }
+      if (!fileSha) {
+        toast.error("File not loaded yet — please wait");
+        return;
+      }
+      if (!markdown) {
+        toast.error("Nothing to save");
+        return;
+      }
       saveMutation.mutate(markdown);
     },
     [canEdit, fileSha, saveMutation]
