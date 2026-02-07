@@ -105,12 +105,50 @@ function issueToThread(issue: GitHubIssue, issueComments: GitHubComment[]): Comm
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function ensureLabel(octokit: any, owner: string, repo: string) {
+async function ensureLabelSafe(octokit: any, owner: string, repo: string, name: string, color: string, description: string): Promise<boolean> {
   try {
-    await octokit.issues.getLabel({ owner, repo, name: LABEL });
-  } catch {
-    await octokit.issues.createLabel({ owner, repo, name: LABEL, color: LABEL_COLOR, description: "mdcolab comment threads" });
+    await octokit.issues.getLabel({ owner, repo, name });
+    return true; // Label already exists
+  } catch (getErr: unknown) {
+    const status = typeof getErr === "object" && getErr !== null && "status" in getErr ? (getErr as { status: number }).status : 0;
+    if (status === 404) {
+      try {
+        await octokit.issues.createLabel({ owner, repo, name, color, description });
+        return true;
+      } catch {
+        return false; // Can't create (403 for non-write users)
+      }
+    }
+    return false; // Can't read label (unexpected)
   }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchIssuesWithLabels(
+  octokit: any,
+  owner: string,
+  repo: string,
+  labels: string
+): Promise<GitHubIssue[]> {
+  const issues: GitHubIssue[] = [];
+  for (const state of ["open", "closed"] as const) {
+    let page = 1;
+    while (true) {
+      const { data } = await octokit.issues.listForRepo({
+        owner,
+        repo,
+        labels,
+        state,
+        per_page: 100,
+        page,
+      });
+      if (data.length === 0) break;
+      issues.push(...(data as unknown as GitHubIssue[]));
+      if (data.length < 100) break;
+      page++;
+    }
+  }
+  return issues;
 }
 
 // ---------------------------------------------------------------------------
@@ -126,34 +164,66 @@ export async function GET(
     const filePath = pathSegments.join("/");
     const octokit = await getOctokit();
 
-    // Fetch all mdcolab issues for this file path (open + closed)
-    const issues: GitHubIssue[] = [];
+    // Strategy: Try path-specific label first, fall back to mdcolab-only label, then search
+    let issues: GitHubIssue[] = [];
     const pathLabel = `path:${filePath}`;
-    for (const state of ["open", "closed"] as const) {
-      let page = 1;
-      while (true) {
-        const { data } = await octokit.issues.listForRepo({
-          owner,
-          repo,
-          labels: `${LABEL},${pathLabel}`,
-          state,
-          per_page: 100,
-          page,
+
+    // Attempt 1: Filter by both mdcolab + path label (most efficient)
+    try {
+      issues = await fetchIssuesWithLabels(octokit, owner, repo, `${LABEL},${pathLabel}`);
+      console.log(`[comments GET] Attempt 1 (path label): found ${issues.length} issues for ${filePath}`);
+    } catch (err) {
+      console.log(`[comments GET] Attempt 1 failed:`, err instanceof Error ? err.message : err);
+    }
+
+    // Attempt 2: If no results, try mdcolab label only and filter by metadata
+    if (issues.length === 0) {
+      try {
+        const allMdcolabIssues = await fetchIssuesWithLabels(octokit, owner, repo, LABEL);
+        console.log(`[comments GET] Attempt 2 (mdcolab label): found ${allMdcolabIssues.length} total mdcolab issues`);
+        issues = allMdcolabIssues.filter((issue) => {
+          const meta = parseMetadata(issue.body ?? "");
+          return meta?.file === filePath;
         });
-        if (data.length === 0) break;
-        issues.push(...(data as unknown as GitHubIssue[]));
-        if (data.length < 100) break;
-        page++;
+        console.log(`[comments GET] Attempt 2: ${issues.length} issues matched file ${filePath}`);
+      } catch (err) {
+        console.log(`[comments GET] Attempt 2 failed:`, err instanceof Error ? err.message : err);
       }
     }
 
-    // For issues with the path label, no need to filter client-side
-    const fileIssues = issues;
+    // Attempt 3: If still nothing, search all issues by title pattern
+    if (issues.length === 0) {
+      try {
+        const searchQuery = `repo:${owner}/${repo} is:issue "[mdcolab]" in:title`;
+        const { data } = await octokit.search.issuesAndPullRequests({
+          q: searchQuery,
+          per_page: 100,
+        });
+        console.log(`[comments GET] Attempt 3 (search): found ${data.total_count} issues via search`);
+        issues = data.items.filter((item) => {
+          const meta = parseMetadata(item.body ?? "");
+          return meta?.file === filePath;
+        }) as unknown as GitHubIssue[];
+        console.log(`[comments GET] Attempt 3: ${issues.length} issues matched file ${filePath}`);
+      } catch (err) {
+        console.log(`[comments GET] Attempt 3 failed:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    console.log(`[comments GET] Final: ${issues.length} issues for ${owner}/${repo}/${filePath}`);
+
+    // Deduplicate issues by number
+    const seen = new Set<number>();
+    issues = issues.filter((issue) => {
+      if (seen.has(issue.number)) return false;
+      seen.add(issue.number);
+      return true;
+    });
 
     // Fetch comments for each issue in parallel
     const threads: CommentThread[] = [];
     await Promise.all(
-      fileIssues.map(async (issue) => {
+      issues.map(async (issue) => {
         const { data: comments } = await octokit.issues.listComments({
           owner,
           repo,
@@ -165,7 +235,6 @@ export async function GET(
       })
     );
 
-    // Sort by creation date
     threads.sort((a, b) => a.comments[0]?.createdAt.localeCompare(b.comments[0]?.createdAt ?? "") ?? 0);
 
     return NextResponse.json({ threads });
@@ -198,20 +267,19 @@ export async function POST(
       const anchor: CommentAnchor = body.anchor;
       const commentBody: string = body.body;
 
-      await ensureLabel(octokit, owner, repo);
-
-      // Ensure file-specific label exists
-      const fileLabel = `file:${filePath}`;
+      // Best-effort label creation (may fail for non-write users)
+      const labels: string[] = [];
+      const fileLabel = `file:${filePath.split("/").pop() ?? filePath}`;
       const pathLabel = `path:${filePath}`;
-      try {
-        await octokit.issues.getLabel({ owner, repo, name: fileLabel });
-      } catch {
-        await octokit.issues.createLabel({ owner, repo, name: fileLabel, color: "0E8A16", description: `mdcolab comments for ${filePath}` });
+
+      if (await ensureLabelSafe(octokit, owner, repo, LABEL, LABEL_COLOR, "mdcolab comment threads")) {
+        labels.push(LABEL);
       }
-      try {
-        await octokit.issues.getLabel({ owner, repo, name: pathLabel });
-      } catch {
-        await octokit.issues.createLabel({ owner, repo, name: pathLabel, color: "0E8A16", description: `mdcolab path ${filePath}` });
+      if (await ensureLabelSafe(octokit, owner, repo, fileLabel, "0E8A16", `mdcolab comments for ${filePath}`)) {
+        labels.push(fileLabel);
+      }
+      if (await ensureLabelSafe(octokit, owner, repo, pathLabel, "0E8A16", `mdcolab path ${filePath}`)) {
+        labels.push(pathLabel);
       }
 
       const selectedText = anchor.selectedText || "General comment";
@@ -223,7 +291,7 @@ export async function POST(
         repo,
         title,
         body: buildIssueBody(anchor, commentBody, filePath),
-        labels: [LABEL, fileLabel, pathLabel],
+        labels: labels.length > 0 ? labels : undefined,
       });
 
       const thread: CommentThread = {
