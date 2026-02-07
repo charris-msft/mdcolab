@@ -344,7 +344,7 @@ export default function DocumentPage() {
           </Tooltip>
 
           {/* Track Changes */}
-          {canEdit && <TrackChangesToggle />}
+          {canEdit && editMode && <TrackChangesToggle />}
 
           {/* Comment count */}
           <Tooltip>
@@ -389,10 +389,10 @@ export default function DocumentPage() {
             <TooltipContent>{isSidebarOpen ? "Close sidebar" : "Open sidebar"}</TooltipContent>
           </Tooltip>
 
-          {canEdit && <Separator orientation="vertical" className="h-6" />}
+          {canEdit && editMode && <Separator orientation="vertical" className="h-6" />}
 
           {/* Save indicator */}
-          {canEdit && (
+          {canEdit && editMode && (
           <div className="flex items-center gap-1.5 text-sm">
             {isSaving ? (
               <>
