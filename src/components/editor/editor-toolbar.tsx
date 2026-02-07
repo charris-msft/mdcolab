@@ -37,12 +37,12 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
   if (!editor) return null;
 
   return (
-    <div className="flex items-center gap-0.5 flex-wrap p-2 border-b border-border sticky top-0 z-10 overflow-x-auto toolbar" style={{ backgroundColor: 'hsl(222 35% 10%)', color: 'hsl(210 40% 96%)' }}>
+    <div className="flex items-center gap-0.5 flex-wrap p-2 border-b border-border sticky top-0 z-10 overflow-x-auto toolbar min-h-[44px] bg-card text-card-foreground">
       {/* Undo/Redo */}
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8"
+        className="h-8 w-8 min-h-[32px] min-w-[32px]"
         onClick={() => editor.chain().focus().undo().run()}
         disabled={!editor.can().undo()}
       >
@@ -51,7 +51,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8"
+        className="h-8 w-8 min-h-[32px] min-w-[32px]"
         onClick={() => editor.chain().focus().redo().run()}
         disabled={!editor.can().redo()}
       >
@@ -66,7 +66,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         pressed={editor.isActive("bold")}
         onPressedChange={() => editor.chain().focus().toggleBold().run()}
         aria-label="Bold"
-        className="h-8 w-8 p-0"
+        className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Bold className="h-4 w-4" />
       </Toggle>
@@ -75,7 +75,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         pressed={editor.isActive("italic")}
         onPressedChange={() => editor.chain().focus().toggleItalic().run()}
         aria-label="Italic"
-        className="h-8 w-8 p-0"
+        className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Italic className="h-4 w-4" />
       </Toggle>
@@ -84,7 +84,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         pressed={editor.isActive("strike")}
         onPressedChange={() => editor.chain().focus().toggleStrike().run()}
         aria-label="Strikethrough"
-        className="h-8 w-8 p-0"
+        className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Strikethrough className="h-4 w-4" />
       </Toggle>
@@ -93,7 +93,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         pressed={editor.isActive("code")}
         onPressedChange={() => editor.chain().focus().toggleCode().run()}
         aria-label="Code"
-        className="h-8 w-8 p-0"
+        className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Code className="h-4 w-4" />
       </Toggle>
@@ -108,7 +108,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleHeading({ level: 1 }).run()
         }
         aria-label="Heading 1"
-        className="h-8 w-8 p-0"
+        className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Heading1 className="h-4 w-4" />
       </Toggle>
@@ -119,7 +119,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleHeading({ level: 2 }).run()
         }
         aria-label="Heading 2"
-        className="h-8 w-8 p-0"
+        className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Heading2 className="h-4 w-4" />
       </Toggle>
@@ -130,7 +130,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleHeading({ level: 3 }).run()
         }
         aria-label="Heading 3"
-        className="h-8 w-8 p-0"
+        className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Heading3 className="h-4 w-4" />
       </Toggle>
@@ -145,7 +145,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleBulletList().run()
         }
         aria-label="Bullet list"
-        className="h-8 w-8 p-0"
+        className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <List className="h-4 w-4" />
       </Toggle>
@@ -156,7 +156,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleOrderedList().run()
         }
         aria-label="Numbered list"
-        className="h-8 w-8 p-0"
+        className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <ListOrdered className="h-4 w-4" />
       </Toggle>
@@ -167,7 +167,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleTaskList().run()
         }
         aria-label="Task list"
-        className="h-8 w-8 p-0"
+        className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <ListTodo className="h-4 w-4" />
       </Toggle>
@@ -182,14 +182,14 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleBlockquote().run()
         }
         aria-label="Blockquote"
-        className="h-8 w-8 p-0"
+        className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Quote className="h-4 w-4" />
       </Toggle>
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8"
+        className="h-8 w-8 min-h-[32px] min-w-[32px]"
         onClick={() => editor.chain().focus().setHorizontalRule().run()}
         aria-label="Horizontal rule"
       >
@@ -198,7 +198,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8"
+        className="h-8 w-8 min-h-[32px] min-w-[32px]"
         onClick={() =>
           editor
             .chain()
@@ -218,7 +218,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 min-h-[32px] min-w-[32px]"
             onClick={() => editor.chain().focus().addRowBefore().run()}
             title="Add row above"
           >
@@ -227,7 +227,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 min-h-[32px] min-w-[32px]"
             onClick={() => editor.chain().focus().addRowAfter().run()}
             title="Add row below"
           >
@@ -236,7 +236,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 min-h-[32px] min-w-[32px]"
             onClick={() => editor.chain().focus().addColumnBefore().run()}
             title="Add column left"
           >
@@ -245,7 +245,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 min-h-[32px] min-w-[32px]"
             onClick={() => editor.chain().focus().addColumnAfter().run()}
             title="Add column right"
           >
@@ -256,7 +256,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 min-h-[32px] min-w-[32px]"
             onClick={() => editor.chain().focus().deleteRow().run()}
             title="Delete row"
           >
@@ -265,7 +265,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 min-h-[32px] min-w-[32px]"
             onClick={() => editor.chain().focus().deleteColumn().run()}
             title="Delete column"
           >

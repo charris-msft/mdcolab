@@ -6,6 +6,7 @@ import { Logo } from "@/components/layout/logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UserMenu } from "@/components/auth/user-menu";
 import { NotificationBell } from "@/components/layout/notification-bell";
+import { HelpButton } from "@/components/layout/help-dialog";
 
 const navLinks = [
   { href: "/dashboard", label: "Dashboard" },
@@ -38,6 +39,7 @@ export function AppNavbar() {
         </div>
         <div className="flex items-center gap-3">
           <NotificationBell />
+          <HelpButton />
           <ThemeToggle />
           <UserMenu />
         </div>

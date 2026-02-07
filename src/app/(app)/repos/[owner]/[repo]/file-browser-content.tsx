@@ -1,9 +1,12 @@
 "use client";
 
+import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Folder, FileText, ChevronRight, Home, GitBranch } from "lucide-react";
+import { Folder, FileText, ChevronRight, Home, GitBranch, Plus, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { GitHubFile, GitHubRepo } from "@/types";
 
 interface FileBrowserContentProps {
@@ -48,6 +51,70 @@ export function FileBrowserContent({ owner, repo }: FileBrowserContentProps) {
     },
     enabled: !!branch,
   });
+
+  const [showNewFile, setShowNewFile] = useState(false);
+  const [newFileName, setNewFileName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const newFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showNewFile) {
+      newFileInputRef.current?.focus();
+    }
+  }, [showNewFile]);
+
+  function openNewFileInput() {
+    setNewFileName(currentPath ? "" : "");
+    setCreateError("");
+    setShowNewFile(true);
+  }
+
+  function validateFileName(name: string): string | null {
+    if (!name.trim()) return "Filename cannot be empty";
+    if (/[<>:"/\\|?*]/.test(name)) return "Filename contains invalid characters";
+    if (name.startsWith(".") || name.startsWith(" ")) return "Filename cannot start with a dot or space";
+    return null;
+  }
+
+  async function handleCreateFile() {
+    let filename = newFileName.trim();
+    if (!filename) return;
+    if (!filename.endsWith(".md") && !filename.endsWith(".mdx")) {
+      filename += ".md";
+    }
+    const error = validateFileName(filename);
+    if (error) {
+      setCreateError(error);
+      return;
+    }
+
+    const fullPath = currentPath ? `${currentPath}/${filename}` : filename;
+    setCreating(true);
+    setCreateError("");
+    try {
+      const res = await fetch(`/api/save/${owner}/${repo}/${branch}/${fullPath}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "# New Document\n\nStart writing here...\n",
+          sha: null,
+          message: `Create ${fullPath} via mdcolab`,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to create file");
+      }
+      setShowNewFile(false);
+      setNewFileName("");
+      router.push(`/d/${owner}/${repo}/${branch}/${fullPath}`);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create file");
+    } finally {
+      setCreating(false);
+    }
+  }
 
   const breadcrumbParts = currentPath ? currentPath.split("/") : [];
 
@@ -105,6 +172,10 @@ export function FileBrowserContent({ owner, repo }: FileBrowserContentProps) {
               {repoInfo?.default_branch ?? "main"}
             </option>
           </select>
+          <Button size="sm" onClick={openNewFileInput}>
+            <Plus className="h-4 w-4" />
+            New
+          </Button>
         </div>
       </div>
 
@@ -137,6 +208,37 @@ export function FileBrowserContent({ owner, repo }: FileBrowserContentProps) {
           );
         })}
       </nav>
+
+      {/* New file input */}
+      {showNewFile && (
+        <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-card px-3 py-2">
+          {currentPath && (
+            <span className="text-sm text-muted-foreground">{currentPath}/</span>
+          )}
+          <Input
+            ref={newFileInputRef}
+            value={newFileName}
+            onChange={(e) => { setNewFileName(e.target.value); setCreateError(""); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreateFile();
+              if (e.key === "Escape") { setShowNewFile(false); setNewFileName(""); }
+            }}
+            placeholder="filename.md"
+            className="h-7 max-w-xs text-sm"
+            disabled={creating}
+          />
+          <Button size="sm" onClick={handleCreateFile} disabled={creating}>
+            {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Create
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => { setShowNewFile(false); setNewFileName(""); }} disabled={creating}>
+            Cancel
+          </Button>
+          {createError && (
+            <span className="text-xs text-destructive">{createError}</span>
+          )}
+        </div>
+      )}
 
       {/* File list */}
       {isLoading && (

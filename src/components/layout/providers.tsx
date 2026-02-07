@@ -7,6 +7,7 @@ import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { ShortcutsDialog } from "@/components/layout/shortcuts-dialog";
+import { HelpDialog } from "@/components/layout/help-dialog";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -30,6 +31,7 @@ export function Providers({ children }: { children: ReactNode }) {
           {children}
           <CommandPalette />
           <ShortcutsDialog />
+          <HelpDialog />
           <Toaster
             position="bottom-right"
             toastOptions={{

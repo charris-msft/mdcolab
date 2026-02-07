@@ -14,17 +14,13 @@ export async function PUT(
     if (!body.content && body.content !== "") {
       return NextResponse.json({ error: "content is required" }, { status: 400 });
     }
-    if (!body.sha) {
-      return NextResponse.json({ error: "sha is required" }, { status: 400 });
-    }
-
     const { data } = await octokit.repos.createOrUpdateFileContents({
       owner,
       repo,
       path: filePath,
       message: body.message || `Update ${filePath} via mdcolab`,
       content: Buffer.from(body.content).toString("base64"),
-      sha: body.sha,
+      ...(body.sha ? { sha: body.sha } : {}),
       branch,
     });
 
