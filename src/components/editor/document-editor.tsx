@@ -16,7 +16,7 @@ import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { common, createLowlight } from "lowlight";
 import { Markdown } from "tiptap-markdown";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useEditorStore } from "@/stores/editor-store";
 import { useCommentCreation } from "@/hooks/use-comment-creation";
 import { useCommentAnchors } from "@/hooks/use-comment-anchors";
@@ -46,6 +46,7 @@ export function DocumentEditor({
   author,
 }: DocumentEditorProps) {
   const { isDirty, setDirty, setContent, setEditable } = useEditorStore();
+  const editorInteracted = useRef(false);
 
   const editor = useEditor({
     extensions: [
@@ -105,6 +106,9 @@ export function DocumentEditor({
       },
     },
     onUpdate: ({ editor }) => {
+      // Skip marking dirty if editor hasn't been interacted with yet
+      if (!editor.isFocused && !editorInteracted.current) { return; }
+      editorInteracted.current = true;
       setDirty(true);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const markdown = (editor.storage as any).markdown.getMarkdown() as string;

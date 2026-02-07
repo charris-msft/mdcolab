@@ -21,7 +21,6 @@ import {
   PanelRightOpen,
   Check,
   Loader2,
-  GitCompare,
   RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
@@ -41,8 +40,6 @@ import {
 import { useComments } from "@/hooks/use-comments";
 import { useKeyboardShortcuts, SHORTCUTS } from "@/hooks/use-keyboard-shortcuts";
 import { useCommentNavigation } from "@/hooks/use-comment-navigation";
-import { TrackChangesToggle } from "@/components/editor/track-changes-toggle";
-import { TrackChangesPanel } from "@/components/editor/track-changes-panel";
 import { addRecentDoc } from "@/lib/recent-docs";
 
 export default function DocumentPage() {
@@ -65,7 +62,7 @@ export default function DocumentPage() {
     login: (sessionAny?.login as string) ?? session?.user?.name ?? "anonymous",
     avatarUrl: session?.user?.image ?? "",
   };
-  const { isDirty, isSaving, setDirty, setSaving, setFilePath, setFileSha, fileSha, showTrackChanges } =
+  const { isDirty, isSaving, setDirty, setSaving, setFilePath, setFileSha, fileSha } =
     useEditorStore();
   const { threads, isSidebarOpen, setSidebarOpen } = useCommentStore();
 
@@ -344,9 +341,6 @@ export default function DocumentPage() {
             </TooltipContent>
           </Tooltip>
 
-          {/* Track Changes */}
-          {canEdit && editMode && <TrackChangesToggle />}
-
           {/* Comment count */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -466,7 +460,7 @@ export default function DocumentPage() {
         {/* Comment Sidebar — Desktop: side panel, Mobile: bottom sheet */}
         {isSidebarOpen && !isMobile && (
           <aside className="w-80 border-l border-border overflow-y-auto shrink-0 comment-sidebar">
-            {showTrackChanges ? <TrackChangesPanel /> : <CommentSidebar hasIssues={hasIssues} />}
+            <CommentSidebar hasIssues={hasIssues} />
           </aside>
         )}
 
@@ -477,7 +471,7 @@ export default function DocumentPage() {
           >
             <SheetContent side="bottom" className="h-[70vh]" showCloseButton={false}>
               <SheetTitle className="sr-only">Comments</SheetTitle>
-              {showTrackChanges ? <TrackChangesPanel /> : <CommentSidebar hasIssues={hasIssues} />}
+              <CommentSidebar hasIssues={hasIssues} />
             </SheetContent>
           </Sheet>
         )}
