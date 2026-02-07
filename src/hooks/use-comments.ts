@@ -27,7 +27,9 @@ export function useComments({ owner, repo, branch, path }: UseCommentsOptions) {
       return res.json() as Promise<{ threads: CommentThread[] }>;
     },
     select: (data) => data.threads,
-    refetchInterval: 5000,
+    refetchInterval: 10000,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
   });
 
   // Sync loaded data to store

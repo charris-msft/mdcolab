@@ -22,6 +22,7 @@ import {
   Check,
   Loader2,
   GitCompare,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -84,7 +85,7 @@ export default function DocumentPage() {
   }, [fileName]);
 
   // Load comments via GitHub Issues
-  useComments({
+  const { refreshComments } = useComments({
     owner,
     repo,
     branch,
@@ -369,6 +370,21 @@ export default function DocumentPage() {
                 ? "Comments"
                 : "Enable Issues in repo settings to use comments"}
             </TooltipContent>
+          </Tooltip>
+
+          {/* Refresh comments */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => refreshComments()}
+                title="Refresh comments"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Refresh comments</TooltipContent>
           </Tooltip>
 
           {/* Sidebar toggle */}
