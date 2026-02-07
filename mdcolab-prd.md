@@ -5,10 +5,18 @@
 | Field | Value |
 | --- | --- |
 | **Product Name** | mdcolab |
-| **Version** | 1.0 |
+| **Version** | 1.1 |
 | **Author** | charris |
 | **Date** | 2026-02-07 |
-| **Status** | Draft |
+| **Last Updated** | 2025-07-17 |
+| **Status** | Updated |
+
+## Revision History
+
+| Date | Version | Changes |
+| --- | --- | --- |
+| 2025-07-17 | 1.1 | Updated PRD to reflect actual implementation: comment storage changed from sidecar JSON to GitHub Issues (§4); auto-save replaced with manual save (EDIT-9); deployment changed from App Service to Azure Container Apps (§7.1); auth clarified as next-auth v4 (§7.1); permission model refined (§2.2, AUTH-5); added new features — file creation, onboarding wizard, review mode commenting, comment anchor highlighting (§3); updated key technical decisions (§7.3); updated glossary (§12). |
+| 2026-02-07 | 1.0 | Initial draft |
 
 ---
 
@@ -16,7 +24,7 @@
 
 **mdcolab** is a web application that transforms how teams collaborate on written documents. It brings the commenting and review experience of Microsoft Word to markdown files stored in GitHub repositories — while adding a premium WYSIWYG editing experience that eliminates the need to switch between markdown editors and .docx files.
 
-Authors write and edit markdown documents in a rich WYSIWYG editor (comparable to Notion), while reviewers open a shared URL, see beautifully rendered content, and add text-anchored comments with threaded replies, @mentions, suggested edits, and track changes. All data — the document and its comments — lives as plain text files in the GitHub repository, fully version-controlled and AI-friendly.
+Authors write and edit markdown documents in a rich WYSIWYG editor (comparable to Notion), while reviewers open a shared URL, see beautifully rendered content, and add text-anchored comments with threaded replies. Comments are stored as **GitHub Issues** on the repository — meaning anyone with read access can participate in reviews without needing write/push access to the repo.
 
 ### The Problem
 
@@ -43,8 +51,8 @@ A web application where:
 3. Authors can **edit** in a rich WYSIWYG editor that saves back to markdown in the repo
 4. Authors share a URL with reviewers
 5. Reviewers highlight any text and add comments — exactly like Microsoft Word
-6. Comments are stored as a sidecar JSON file (`doc.md.comments.json`) in the same repo
-7. Everyone can reply, resolve, @mention, suggest edits, and track changes
+6. Comments are stored as **GitHub Issues** on the repository — reviewers only need read access
+7. Everyone can reply and resolve threads via the GitHub Issues integration
 
 ---
 
@@ -57,29 +65,30 @@ A web application where:
 | **Document Author** | Technical writer, PM, engineer, architect, or team lead who writes documents in markdown | Edit documents in a rich WYSIWYG editor while seeing reviewer comments. Save as clean markdown to GitHub. |
 | **Document Reviewer** | Colleague, stakeholder, or subject-matter expert asked to provide feedback | Read rendered markdown and add text-anchored comments, replies, and suggested edits — without needing to understand markdown or GitHub. |
 
-### 2.2 User Requirements
+### 2.2 User Requirements [Updated]
 
 - All users must have a GitHub account (GitHub OAuth is the sole authentication method)
-- Authors must have `push` access to the repository to edit documents
-- Reviewers need at minimum `read` access to the repository to view and comment
+- Authors must have `push` access to the repository to edit documents AND comment
+- Reviewers need at minimum `read` access to the repository to view and comment (commenting uses GitHub Issues, which only requires read access)
+- Users without any access to a repository are redirected to sign in, then receive a 404 from the GitHub API
 - No software installation required — the app runs entirely in the browser
 
 ---
 
 ## 3. Functional Requirements
 
-### 3.1 Authentication & Authorization
+### 3.1 Authentication & Authorization [Updated]
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| AUTH-1 | Users authenticate via GitHub OAuth 2.0 | P0 |
-| AUTH-2 | The app requests `repo` scope to read/write repository files | P0 |
+| AUTH-1 | Users authenticate via GitHub OAuth 2.0 (next-auth v4) | P0 |
+| AUTH-2 | The app requests `repo` scope to read/write repository files and issues | P0 |
 | AUTH-3 | User sessions persist across browser sessions (refresh tokens) | P0 |
 | AUTH-4 | Users can sign out and revoke access | P0 |
-| AUTH-5 | Permission model: users with `push` access to a repo can edit documents; users with `read` access can view and comment | P0 |
+| AUTH-5 | Permission model: users with `push` access can edit documents and comment; users with `read` access can view and comment (via GitHub Issues); users without access are redirected to sign in and receive a 404 from the GitHub API | P0 |
 | AUTH-6 | Unauthenticated users who visit a document URL are redirected to sign in, then returned to the document | P0 |
 
-### 3.2 Repository & File Navigation
+### 3.2 Repository & File Navigation [Updated]
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
@@ -89,6 +98,7 @@ A web application where:
 | NAV-4 | Users can switch branches when browsing a repository | P1 |
 | NAV-5 | Repository list supports search/filter by name | P1 |
 | NAV-6 | File tree shows markdown files with an indicator if they have existing comments | P2 |
+| NAV-7 | **New file creation**: A "+ New" button in the repo browser allows users to create new `.md` files inline | P0 |
 
 ### 3.3 Document Viewing
 
@@ -103,7 +113,7 @@ A web application where:
 | VIEW-7 | Hovering over commented text shows a tooltip preview of the first comment in the thread | P1 |
 | VIEW-8 | Clicking commented text scrolls the comment sidebar to that thread | P0 |
 
-### 3.4 Document Editing (WYSIWYG)
+### 3.4 Document Editing (WYSIWYG) [Updated]
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
@@ -115,7 +125,7 @@ A web application where:
 | EDIT-6 | **Code blocks** include a language selector dropdown, syntax highlighting, and a copy button | P0 |
 | EDIT-7 | **Images** can be inserted by pasting, drag-and-drop, or URL. Pasted/dropped images are committed to the repo as assets. | P1 |
 | EDIT-8 | Keyboard shortcuts work as expected: Cmd+B bold, Cmd+I italic, Cmd+K link, Cmd+Z undo, Cmd+Shift+Z redo | P0 |
-| EDIT-9 | **Auto-save**: Changes auto-save to GitHub after a 3-second debounce of inactivity. A dirty-state indicator shows unsaved changes. Manual save via Cmd+S. | P0 |
+| EDIT-9 | **Manual save only**: Changes are saved to GitHub via Ctrl+S / Cmd+S or the Save button. A dirty-state indicator shows unsaved changes. There is no auto-save — saving to a GitHub repository is an intentional action to avoid accidental commits. | P0 |
 | EDIT-10 | **Markdown round-trip fidelity**: The WYSIWYG editor saves clean, idiomatic markdown. Editing a file and saving it should not introduce formatting drift, extra whitespace, or structural changes to unedited sections. | P0 |
 | EDIT-11 | YAML frontmatter is preserved through the edit cycle (extracted before parsing, re-prepended on save) | P1 |
 | EDIT-12 | Drag-and-drop block reordering: paragraphs, headings, and list items can be reordered by dragging a handle | P2 |
@@ -123,46 +133,47 @@ A web application where:
 
 ### 3.5 Comment System
 
-#### 3.5.1 Comment Creation
+#### 3.5.1 Comment Creation [Updated]
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | CMT-1 | Users can select any text in the rendered document and create a comment anchored to that selection | P0 |
-| CMT-2 | Comment creation is triggered by: (a) clicking "Comment" in the bubble toolbar, or (b) pressing Ctrl+Alt+M | P0 |
-| CMT-3 | The selected text is highlighted and a new empty comment thread appears in the sidebar with focus in the text input | P0 |
-| CMT-4 | Comments are posted by pressing Ctrl+Enter or clicking the Post button | P0 |
-| CMT-5 | After posting, the comment mark (highlight) persists on the text and the thread appears in the sidebar | P0 |
-| CMT-6 | Users can create document-level comments (not anchored to specific text) via a "General Comment" button | P1 |
+| CMT-2 | In Edit mode, comment creation is triggered by: (a) clicking "Comment" in the bubble toolbar, or (b) pressing Ctrl+Alt+M | P0 |
+| CMT-3 | In Review mode (non-editable), a **floating "Comment" button** appears near the text selection to trigger comment creation | P0 |
+| CMT-4 | The selected text is highlighted and a new empty comment thread appears in the sidebar with focus in the text input | P0 |
+| CMT-5 | Comments are posted by pressing Ctrl+Enter or clicking the Post button | P0 |
+| CMT-6 | After posting, the comment is created as a GitHub Issue; the highlight persists on the text and the thread appears in the sidebar | P0 |
+| CMT-7 | Users can create document-level comments (not anchored to specific text) via a "General Comment" button | P1 |
 
-#### 3.5.2 Comment Display & Navigation
+#### 3.5.2 Comment Display & Navigation [Updated]
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | CMT-10 | Comments appear in a **right-hand sidebar panel** with a glass-effect (translucent) background | P0 |
 | CMT-11 | Each comment thread card shows: highlighted text excerpt, author avatar + name, timestamp, comment body, reply count | P0 |
-| CMT-12 | **SVG connector lines** visually link the highlighted text in the document to the corresponding comment card in the sidebar | P1 |
+| CMT-12 | **Comment anchor highlighting**: Comment threads are highlighted in the document text; clicking a comment card scrolls to and highlights the anchored text in the document | P0 |
 | CMT-13 | The sidebar scrolls in sync with the document — comments stay aligned with their anchored text | P0 |
 | CMT-14 | **Next/Previous navigation** buttons allow jumping between comment threads (Ctrl+Alt+↓/↑) | P1 |
 | CMT-15 | Clicking a comment card scrolls the document to the anchored text | P0 |
 | CMT-16 | The currently active/focused comment thread is visually distinguished (brighter highlight, elevated card) | P1 |
 | CMT-17 | A badge in the toolbar shows the count of open comment threads | P1 |
 
-#### 3.5.3 Threaded Replies
+#### 3.5.3 Threaded Replies [Updated]
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| CMT-20 | Users can reply to any comment in a thread | P0 |
-| CMT-21 | Replies are displayed nested within the thread card, each with its own author avatar, timestamp, and body | P0 |
+| CMT-20 | Users can reply to any comment thread | P0 |
+| CMT-21 | Replies are stored as GitHub Issue comments on the corresponding Issue and displayed nested within the thread card, each with its own author avatar, timestamp, and body | P0 |
 | CMT-22 | Replying to a thread triggers a notification for the thread's participants | P1 |
 
-#### 3.5.4 Comment Resolution
+#### 3.5.4 Comment Resolution [Updated]
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| CMT-30 | Any participant can resolve a comment thread | P0 |
+| CMT-30 | Any participant can resolve a comment thread (this closes the corresponding GitHub Issue) | P0 |
 | CMT-31 | Resolved threads are visually dimmed (reduced opacity) or hidden, depending on the active filter | P0 |
 | CMT-32 | A filter toggle in the sidebar allows viewing: **Open**, **Resolved**, or **All** threads | P0 |
-| CMT-33 | Resolved threads can be re-opened | P0 |
+| CMT-33 | Resolved threads can be re-opened (this reopens the corresponding GitHub Issue) | P0 |
 | CMT-34 | The text highlight for resolved threads changes from yellow to a subtle gray | P1 |
 
 #### 3.5.5 Comment Editing & Deletion
@@ -181,7 +192,7 @@ A web application where:
 | MEN-2 | The autocomplete searches GitHub users via the API, filtered by characters typed after `@` | P0 |
 | MEN-3 | Selected mentions render as styled pills (linked to GitHub profile) in the comment body | P1 |
 | MEN-4 | Mentioned users receive a notification (in-app notification bell) | P1 |
-| MEN-5 | Mentions are stored in the comment's `mentions` array in the sidecar JSON | P0 |
+| MEN-5 | Mentions are stored in the comment body text within the GitHub Issue | P0 |
 
 ### 3.7 Suggested Edits
 
@@ -192,7 +203,7 @@ A web application where:
 | SUG-3 | The document author (or anyone with push access) can **Accept** or **Reject** the suggestion | P0 |
 | SUG-4 | Accepting a suggestion replaces the anchored text in the document and marks the suggestion as accepted | P0 |
 | SUG-5 | Rejecting a suggestion marks it as rejected without changing the document | P0 |
-| SUG-6 | Suggested edits are stored in the comment's `suggestedEdit` field in the sidecar JSON | P0 |
+| SUG-6 | Suggested edits are stored within the comment body in the GitHub Issue | P0 |
 
 ### 3.8 Track Changes
 
@@ -220,77 +231,77 @@ A web application where:
 | SRC-2 | Comment sidebar supports filtering by: author, status (open/resolved), date range | P1 |
 | SRC-3 | Full-text search across comment bodies with highlighted results in the sidebar | P2 |
 
+### 3.11 Onboarding & Help [New]
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| ONB-1 | A **4-page onboarding wizard** is shown on the user's first visit to guide them through the app's features | P0 |
+| ONB-2 | The onboarding flow includes security guidance about using test accounts and repositories for evaluation | P0 |
+| ONB-3 | Users can dismiss the wizard and it will not reappear (persisted via localStorage) | P0 |
+| ONB-4 | A "Help" button in the toolbar allows users to replay the onboarding wizard at any time | P1 |
+
 ---
 
-## 4. Comment Storage Specification
+## 4. Comment Storage Specification [Updated]
 
-### 4.1 Storage Model
+### 4.1 Storage Model [Updated]
 
-Comments are stored in a **sidecar JSON file** alongside the markdown document in the same GitHub repository.
+Comments are stored as **GitHub Issues** on the repository. This approach was chosen over the original sidecar JSON design because reviewers typically have read access (not push/write access) to a repository — and GitHub Issues can be created by anyone with read access.
 
-- For a document at `docs/design.md`, comments are stored at `docs/design.md.comments.json`
-- The sidecar file is committed to the repository like any other file
-- This means comments are version-controlled, searchable, and AI-readable
+- Each comment thread = one GitHub Issue
+- Issue title format: `[mdcolab] "selected text excerpt..." — filepath`
+- Two labels per Issue: `mdcolab` (global identifier) + `file:{filepath}` (per-file filtering)
+- The Issue body contains comment metadata in an HTML comment block (invisible when rendered) followed by the first comment text
+- Thread replies = GitHub Issue comments
+- Resolving a thread = closing the GitHub Issue
+- Reopening a thread = reopening the GitHub Issue
 
-### 4.2 Schema
+**Key benefit**: Anyone with read access to the repository can create and participate in comment threads — no write/push access needed. This enables true collaborative review where stakeholders, managers, and subject-matter experts can provide feedback without being repository contributors.
 
-```jsonc
-{
-  "version": "1.0",
-  "documentHash": "sha256-of-md-content-at-time-of-last-save",
-  "threads": [
-    {
-      "id": "uuid-v4",
-      "status": "open | resolved",
-      "anchor": {
-        "type": "text-range | document",
-        "markdownOffset": {          // only for text-range type
-          "start": 1423,
-          "end": 1489
-        },
-        "selectedText": "the exact text that was highlighted",
-        "context": {
-          "before": "30 chars before the selection",
-          "after": "30 chars after the selection"
-        }
-      },
-      "comments": [
-        {
-          "id": "uuid-v4",
-          "author": {
-            "login": "github-username",
-            "avatarUrl": "https://github.com/username.png"
-          },
-          "body": "Comment text with @mentions",
-          "mentions": ["username1", "username2"],
-          "suggestedEdit": null | {
-            "replacement": "proposed replacement text",
-            "status": "pending | accepted | rejected",
-            "resolvedBy": "github-username | null",
-            "resolvedAt": "ISO-8601 | null"
-          },
-          "createdAt": "ISO-8601",
-          "updatedAt": "ISO-8601 | null"
-        }
-      ]
-    }
-  ]
-}
+### 4.2 Issue Structure [Updated]
+
+**Issue Title:**
+```
+[mdcolab] "first 50 chars of selected text..." — path/to/document.md
 ```
 
-### 4.3 Concurrency Control
+**Issue Labels:**
+- `mdcolab` — applied to all mdcolab comment Issues for global identification
+- `file:path/to/document.md` — applied for per-file filtering when loading comments
 
-- File updates use GitHub's `sha` parameter for optimistic concurrency
-- On SHA mismatch (409 conflict): fetch latest version, merge comment arrays by UUID, retry
-- Comment UUIDs ensure idempotent merges — no duplicate threads from concurrent writes
+**Issue Body:**
+```markdown
+<!-- mdcolab-metadata
+{
+  "anchor": {
+    "selectedText": "the exact text that was highlighted",
+    "prefix": "30 chars before the selection",
+    "suffix": "30 chars after the selection"
+  },
+  "filepath": "path/to/document.md",
+  "branch": "main"
+}
+-->
+
+The actual comment text written by the reviewer.
+```
+
+The HTML comment block (`<!-- mdcolab-metadata ... -->`) is invisible when viewing the Issue on GitHub but is parsed by mdcolab to reconstruct the comment anchor.
+
+### 4.3 Concurrency & Consistency [Updated]
+
+- GitHub Issues have built-in concurrency handling — no SHA-based optimistic locking needed for comments
+- Multiple users can comment simultaneously without conflict
+- Issue state (open/closed) is authoritative for thread resolution status
+- Comments are loaded by querying Issues with the `mdcolab` label and `file:{filepath}` label
 
 ### 4.4 Anchor Resilience
 
-When a document is edited outside mdcolab (e.g., in VS Code), character offsets may shift:
+When a document is edited outside mdcolab (e.g., in VS Code), the anchored text may no longer match:
 
-1. On load, attempt exact offset match against the current markdown content
-2. If `selectedText` at the stored offset doesn't match, perform fuzzy search using `selectedText` + `context` (before/after text)
-3. If fuzzy match succeeds, re-anchor and update offsets on next save
+1. On load, attempt exact match of `selectedText` in the current document content
+2. If exact match fails, perform fuzzy search using `selectedText` + `prefix`/`suffix` context
+3. If fuzzy match succeeds, re-anchor the comment to the new position
 4. If fuzzy match fails, mark the thread as **orphaned** and display it in a separate "Orphaned Comments" section in the sidebar
 
 ---
@@ -312,7 +323,7 @@ When a document is edited outside mdcolab (e.g., in VS Code), character offsets 
 | ID | Requirement |
 | --- | --- |
 | REL-1 | Optimistic UI for all comment operations — UI updates immediately, reconciles with server response |
-| REL-2 | Auto-save with conflict detection and retry (no silent data loss) |
+| REL-2 | Manual save with conflict detection — if the file has changed on GitHub since loading, warn the user before overwriting |
 | REL-3 | Graceful degradation when GitHub API is unavailable — show cached content with "offline" indicator |
 | REL-4 | All errors surface via toast notifications with actionable messages |
 
@@ -436,14 +447,14 @@ Inverted luminance values with the same hue palette. Accent colors remain consis
 
 ## 7. Technical Architecture
 
-### 7.1 Stack
+### 7.1 Stack [Updated]
 
 | Component | Technology | Rationale |
 | --- | --- | --- |
 | Framework | Next.js 14+ (App Router), TypeScript | SSR for initial load, API routes for backend, server components |
 | Editor | Tiptap 2 (ProseMirror-based) | Headless WYSIWYG, custom marks for comments, extensions for slash commands, markdown serialization |
 | Markdown serialization | `tiptap-markdown` + custom serializers | Clean round-trip: markdown → Tiptap JSON → markdown |
-| Auth | NextAuth.js (GitHub OAuth) | Industry-standard, built-in session management |
+| Auth | NextAuth.js v4 (GitHub OAuth) — uses `NextAuthOptions` + `getServerSession` pattern | Industry-standard, built-in session management |
 | GitHub API | Octokit | Official SDK, typed, maintained by GitHub |
 | Styling | Tailwind CSS 4, shadcn/ui, Radix UI | Utility-first CSS, accessible component primitives |
 | Animation | Framer Motion | Declarative animations, layout transitions |
@@ -451,7 +462,7 @@ Inverted luminance values with the same hue palette. Accent colors remain consis
 | Data fetching | TanStack Query | Caching, optimistic updates, background refetch, stale-while-revalidate |
 | Icons | Lucide React | Consistent with shadcn/ui |
 | Fonts | Inter (UI), JetBrains Mono (code) | Premium, readable, open-source |
-| Deployment | Azure App Service | Managed hosting, CI/CD via GitHub Actions |
+| Deployment | Azure Container Apps | Containerized hosting via Container Registry, Managed Identity with AcrPull role, Consumption plan, deployed via `azd up` |
 
 ### 7.2 Architecture Diagram
 
@@ -478,38 +489,58 @@ Browser (Client)
     │   ├── GET  /api/repos/:owner/:repo/tree  → File tree
     │   ├── GET  /api/file/:owner/:repo/:branch/:path  → File content
     │   ├── PUT  /api/file/:owner/:repo/:branch/:path  → Save file
-    │   ├── GET  /api/comments/:owner/:repo/:branch/:path  → Load comments
-    │   ├── PUT  /api/comments/:owner/:repo/:branch/:path  → Save comments
+    │   ├── GET  /api/comments/:owner/:repo/:path      → Load comments (GitHub Issues with mdcolab + file: labels)
+    │   ├── POST /api/comments/:owner/:repo/:path      → Create comment (GitHub Issue)
+    │   ├── POST /api/comments/:owner/:repo/:path/:issueNumber/reply  → Reply (Issue comment)
+    │   ├── PATCH /api/comments/:owner/:repo/:path/:issueNumber       → Resolve/reopen (close/open Issue)
     │   └── GET  /api/users/search?q=          → Search GitHub users
     │
     └── External
         ├── GitHub OAuth (authentication)
-        └── GitHub REST API (file read/write, user search)
+        └── GitHub REST API (file read/write, Issues for comments, user search)
 ```
 
-### 7.3 Key Technical Decisions
+### 7.3 Key Technical Decisions [Updated]
 
 #### Tiptap as the Unified Core
 
-Using Tiptap for both viewing (read-only) and editing eliminates the need for two separate rendering paths. View mode is simply `editor.setEditable(false)`. Comment marks work identically in both modes. ProseMirror's position mapping system keeps comment anchors stable during editing — when text is inserted before a comment mark, the mark's position adjusts automatically.
+Using Tiptap for both viewing (read-only) and editing eliminates the need for two separate rendering paths. View mode is simply `editor.setEditable(false)`. Comment marks work identically in both modes. ProseMirror's position mapping system keeps comment anchors stable during editing — when text is inserted before a comment mark, the mark's position adjusts automatically. The `tiptap-markdown` extension handles round-trip serialization between markdown and the editor's internal document model.
 
 #### No Database
 
-All persistent state lives in the GitHub repository as files. This means:
+All persistent state lives in the GitHub repository — documents as files, comments as Issues. This means:
 
 - Zero infrastructure beyond the web app itself
-- Comments are version-controlled alongside the document
+- Comments leverage GitHub's built-in issue tracking (notifications, search, API)
 - No data migration, no database management, no backup strategy needed
 - Trade-off: no real-time push updates (polling or manual refresh for now)
 
-#### Sidecar JSON vs. PR Comments
+#### GitHub Issues vs. Sidecar JSON [Updated]
 
-We chose sidecar JSON files over GitHub PR review comments because:
+The original design specified sidecar `.comments.json` files committed alongside documents. This was changed to **GitHub Issues** because:
 
-- PR comments are tied to the PR lifecycle (closed PR = hard to find comments)
-- PR comments are line-based, not text-selection-based
-- Sidecar files are permanent, portable, and independent of Git workflows
-- Sidecar files can be read/written by AI tools, scripts, and other apps
+- **Access control**: Sidecar JSON files require push/write access to commit. Reviewers typically have read-only access. GitHub Issues can be created by anyone with read access to the repo.
+- **Built-in features**: GitHub Issues provide notifications, search, cross-references, and a web UI for free
+- **No merge conflicts**: Unlike committed files, Issues don't create merge conflicts when multiple reviewers comment simultaneously
+- **Metadata in HTML comments**: Anchor metadata (selected text, prefix, suffix) is stored in an HTML comment block in the Issue body — invisible in the GitHub UI but parseable by mdcolab
+
+Trade-offs vs. sidecar JSON:
+- Comments are not inline with the file in the repo (they live in the Issues tab)
+- Comments are not as easily consumed by AI tools that scan file trees
+- Comment data is tied to the GitHub Issues API rather than being plain files
+
+#### Manual Save vs. Auto-Save [Updated]
+
+The original design specified auto-save with a 3-second debounce. This was changed to **manual save only** (Ctrl+S / Save button) because saving to a GitHub repository creates a commit — an intentional, versioned action. Auto-saving could produce noisy commit histories and accidental changes, especially for shared repositories.
+
+#### Azure Container Apps vs. App Service [Updated]
+
+Deployment uses **Azure Container Apps** (Consumption plan) instead of Azure App Service:
+
+- Docker image stored in Azure Container Registry
+- Managed Identity with AcrPull role for secure image pulls
+- Consumption plan eliminates the need for VM quota
+- Deployed via `azd up` for streamlined infrastructure provisioning
 
 ---
 
@@ -545,14 +576,14 @@ We chose sidecar JSON files over GitHub PR review comments because:
 | --- | --- | --- | --- |
 | Markdown round-trip introduces formatting drift | High — data corruption | Medium | Comprehensive test suite with 50+ markdown documents. Diff on every save to detect drift. |
 | GitHub API rate limits (5,000/hr) exceeded by heavy users | Medium — degraded experience | Medium | Aggressive caching (TanStack Query), conditional requests (ETags), debounced writes. Show rate limit to user. |
-| Concurrent comment writes cause data loss | High — user frustration | Low | SHA-based optimistic concurrency, UUID-based merge, automatic retry with user notification. |
+| Concurrent comment writes cause data loss | ~~High~~ Low — GitHub Issues handle concurrency natively | ~~Low~~ N/A | GitHub Issues have built-in concurrency; no SHA-based merging needed. Multiple reviewers can comment simultaneously without conflict. |
 | Comment anchors break after large document restructuring | Medium — orphaned comments | Medium | Fuzzy re-anchoring with selectedText + context. Orphaned comments UI. "Re-anchor" manual action. |
 | Tiptap markdown serializer doesn't handle edge cases | High — garbled output | Medium | Custom serializer overrides. Extensive test coverage. User can view raw markdown before saving. |
 | Performance degrades on very large documents (&gt;100KB) | Medium — slow editor | Low | Virtual scrolling for long docs. Warn on large files. Lazy-load comment sidebar. |
 
 ---
 
-## 11. Future Considerations (Out of Scope for v1)
+## 11. Future Considerations (Out of Scope for v1) [Updated]
 
 | Feature | Description |
 | --- | --- |
@@ -566,18 +597,23 @@ We chose sidecar JSON files over GitHub PR review comments because:
 | Approval workflows | "Approve" / "Request Changes" actions like GitHub PR reviews. |
 | Comment templates | Predefined comment templates (e.g., "Needs clarification", "Out of scope"). |
 | Analytics dashboard | Author dashboard showing review activity, response times, resolution rates. |
+| Sidecar JSON export | Optional export of comment threads to a sidecar `.comments.json` file for AI tooling and offline analysis. (Original v1 storage model — replaced by GitHub Issues for accessibility reasons.) |
+| SVG connector lines | Visual SVG lines linking highlighted text in the document to the corresponding comment card in the sidebar. (Original v1 design — replaced by click-to-scroll anchor highlighting.) |
+| Auto-save mode | Optional auto-save with configurable debounce for users who prefer automatic commits. (Original v1 design — replaced by manual save for intentional commit control.) |
 
 ---
 
-## 12. Glossary
+## 12. Glossary [Updated]
 
 | Term | Definition |
 | --- | --- |
-| **Sidecar file** | A companion file (e.g., `doc.md.comments.json`) stored alongside the markdown file in the same directory |
-| **Thread** | A comment and its replies, anchored to a specific text selection or the document as a whole |
-| **Anchor** | The text selection (or document reference) that a comment thread is attached to |
+| **GitHub Issue (comment storage)** | Each comment thread is stored as a GitHub Issue on the repository, with metadata in an HTML comment block and thread replies as Issue comments |
+| **Thread** | A comment and its replies, anchored to a specific text selection or the document as a whole, represented as a single GitHub Issue |
+| **Anchor** | The text selection (or document reference) that a comment thread is attached to, stored as metadata in the GitHub Issue body |
 | **Orphaned comment** | A comment whose anchored text can no longer be found in the document (e.g., the text was deleted) |
 | **Bubble toolbar** | A floating toolbar that appears above selected text with formatting and commenting options |
 | **Slash commands** | A menu triggered by typing `/` that allows inserting blocks (headings, lists, tables, etc.) |
 | **Track changes** | A view mode that shows pending, accepted, and rejected suggested edits inline in the document |
 | **Round-trip fidelity** | The property that converting markdown → editor state → markdown produces identical output |
+| **Review mode** | A non-editable viewing mode where reviewers can read the document and add comments via a floating Comment button |
+| **Onboarding wizard** | A 4-page introductory flow shown on first visit to guide users through the app's features and security guidance |
