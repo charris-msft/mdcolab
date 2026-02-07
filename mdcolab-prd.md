@@ -5,16 +5,17 @@
 | Field | Value |
 | --- | --- |
 | **Product Name** | mdcolab |
-| **Version** | 1.1 |
+| **Version** | 1.2 |
 | **Author** | charris |
 | **Date** | 2026-02-07 |
-| **Last Updated** | 2025-07-17 |
+| **Last Updated** | 2026-02-07 |
 | **Status** | Updated |
 
 ## Revision History
 
 | Date | Version | Changes |
 | --- | --- | --- |
+| 2026-02-07 | 1.2 | Added descriptive tooltips with keyboard shortcuts on all editor toolbar, bubble toolbar, and comment sidebar buttons/toggles (§3.4, §6); comment threads in sidebar now sorted by document position (top to bottom) instead of creation time (§3.5.2, §6); bidirectional comment highlighting — clicking a comment in the sidebar highlights anchored text with pulse animation, clicking highlighted text opens sidebar and activates corresponding thread, uses `data-comment-mark` attributes on rendered spans (§3.5.2); dashboard repo cards now show `owner/reponame` format with muted owner prefix (§3.2); localStorage-based recent documents tracking displayed on dashboard with relative timestamps, file name, repo path, and direct links, max 10 entries (§3.2); active comment marks have brighter highlight + CSS pulse animation, hover state shows intermediate highlight (§6); updated Next.js to 16.1.6 (§7.1); added Vitest and Playwright to tech stack (§7.1). |
 | 2025-07-17 | 1.1 | Updated PRD to reflect actual implementation: comment storage changed from sidecar JSON to GitHub Issues (§4); auto-save replaced with manual save (EDIT-9); deployment changed from App Service to Azure Container Apps (§7.1); auth clarified as next-auth v4 (§7.1); permission model refined (§2.2, AUTH-5); added new features — file creation, onboarding wizard, review mode commenting, comment anchor highlighting (§3); updated key technical decisions (§7.3); updated glossary (§12). |
 | 2026-02-07 | 1.0 | Initial draft |
 
@@ -92,13 +93,15 @@ A web application where:
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| NAV-1 | Dashboard shows the user's recent documents and repositories | P0 |
+| NAV-1 | Dashboard shows the user's recent documents and repositories. Repository cards display `owner/reponame` format with a muted owner prefix. | P0 |
 | NAV-2 | Users can browse their accessible GitHub repositories (personal + org) | P0 |
 | NAV-3 | Users can browse the file tree of a repository and select markdown files (.md, .mdx) | P0 |
 | NAV-4 | Users can switch branches when browsing a repository | P1 |
 | NAV-5 | Repository list supports search/filter by name | P1 |
 | NAV-6 | File tree shows markdown files with an indicator if they have existing comments | P2 |
 | NAV-7 | **New file creation**: A "+ New" button in the repo browser allows users to create new `.md` files inline | P0 |
+| NAV-8 | **Recent documents**: localStorage-based tracking of recently opened documents (max 10 entries), displayed on the dashboard with relative timestamps, file name, repo path, and direct links | P0 |
+| NAV-9 | **Repository owner display**: Repository cards on the dashboard show `owner/reponame` format with a muted owner prefix | P0 |
 
 ### 3.3 Document Viewing
 
@@ -130,6 +133,7 @@ A web application where:
 | EDIT-11 | YAML frontmatter is preserved through the edit cycle (extracted before parsing, re-prepended on save) | P1 |
 | EDIT-12 | Drag-and-drop block reordering: paragraphs, headings, and list items can be reordered by dragging a handle | P2 |
 | EDIT-13 | While editing, comment highlights and the comment sidebar remain visible — authors can see feedback while they write | P0 |
+| EDIT-14 | **Tooltips**: All interactive buttons and toggles in the editor toolbar, bubble toolbar, and comment sidebar have descriptive tooltips with keyboard shortcuts where applicable | P0 |
 
 ### 3.5 Comment System
 
@@ -151,8 +155,8 @@ A web application where:
 | --- | --- | --- |
 | CMT-10 | Comments appear in a **right-hand sidebar panel** with a glass-effect (translucent) background | P0 |
 | CMT-11 | Each comment thread card shows: highlighted text excerpt, author avatar + name, timestamp, comment body, reply count | P0 |
-| CMT-12 | **Comment anchor highlighting**: Comment threads are highlighted in the document text; clicking a comment card scrolls to and highlights the anchored text in the document | P0 |
-| CMT-13 | The sidebar scrolls in sync with the document — comments stay aligned with their anchored text | P0 |
+| CMT-12 | **Bidirectional comment highlighting**: Clicking a comment card in the sidebar highlights the anchored text in the document with a pulse animation; clicking highlighted text in the document opens the sidebar and activates the corresponding comment thread. Uses `data-comment-mark` attributes on rendered spans. | P0 |
+| CMT-13 | **Comment ordering**: Comment threads in the sidebar are sorted by document position (top to bottom), matching the order text appears in the file, not by creation time | P0 |
 | CMT-14 | **Next/Previous navigation** buttons allow jumping between comment threads (Ctrl+Alt+↓/↑) | P1 |
 | CMT-15 | Clicking a comment card scrolls the document to the anchored text | P0 |
 | CMT-16 | The currently active/focused comment thread is visually distinguished (brighter highlight, elevated card) | P1 |
@@ -427,16 +431,23 @@ Inverted luminance values with the same hue palette. Accent colors remain consis
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 6.5 Key Interactions
+### 6.5 Comment Highlight UX [Updated]
+
+- **Active comment marks** have a brighter highlight (`--comment-highlight-active`) plus a CSS pulse animation to draw the user's eye
+- **Hover state** on comment marks shows an intermediate highlight between the default and active states
+- **Comment ordering** in the sidebar matches document flow — threads are sorted by their anchor position in the document (top to bottom), not by creation time
+- **Bidirectional activation**: Clicking a comment card pulses the anchored text; clicking anchored text opens the sidebar and activates the corresponding thread
+
+### 6.6 Key Interactions [Updated]
 
 | Interaction | Behavior |
 | --- | --- |
-| Select text in document | Bubble toolbar appears above selection with: Bold, Italic, Code, Link, Highlight, **Comment**, Suggest Edit |
+| Select text in document | Bubble toolbar appears above selection with: Bold, Italic, Code, Link, Highlight, **Comment**, Suggest Edit. All buttons have descriptive tooltips with keyboard shortcuts. |
 | Click "Comment" in toolbar | Sidebar scrolls to a new empty thread card; text gets yellow highlight; cursor focuses in comment input |
 | Post a comment | Comment appears in thread; highlight becomes permanent; toast confirms "Comment added" |
 | Hover over highlighted text | Tooltip shows first comment preview; highlight intensifies |
-| Click highlighted text | Sidebar scrolls to thread; thread card elevates/glows to indicate active state |
-| Click comment card | Document scrolls to anchored text; highlight pulses briefly |
+| Click highlighted text | Sidebar opens (if closed) and activates the corresponding comment thread; thread card elevates/glows to indicate active state. Uses `data-comment-mark` attributes on rendered spans. |
+| Click comment card | Document scrolls to anchored text; highlight pulses with CSS animation |
 | Resolve a thread | Card dims with slide animation; highlight changes to gray; count badge updates |
 | Type `/` in edit mode | Slash command dropdown appears with block options, filterable by typing |
 | Press Cmd+K | Command palette opens (centered modal) with search input |
@@ -451,7 +462,7 @@ Inverted luminance values with the same hue palette. Accent colors remain consis
 
 | Component | Technology | Rationale |
 | --- | --- | --- |
-| Framework | Next.js 14+ (App Router), TypeScript | SSR for initial load, API routes for backend, server components |
+| Framework | Next.js 16.1.6 (App Router), TypeScript | SSR for initial load, API routes for backend, server components |
 | Editor | Tiptap 2 (ProseMirror-based) | Headless WYSIWYG, custom marks for comments, extensions for slash commands, markdown serialization |
 | Markdown serialization | `tiptap-markdown` + custom serializers | Clean round-trip: markdown → Tiptap JSON → markdown |
 | Auth | NextAuth.js v4 (GitHub OAuth) — uses `NextAuthOptions` + `getServerSession` pattern | Industry-standard, built-in session management |
@@ -462,6 +473,8 @@ Inverted luminance values with the same hue palette. Accent colors remain consis
 | Data fetching | TanStack Query | Caching, optimistic updates, background refetch, stale-while-revalidate |
 | Icons | Lucide React | Consistent with shadcn/ui |
 | Fonts | Inter (UI), JetBrains Mono (code) | Premium, readable, open-source |
+| Unit Testing | Vitest | Fast, ESM-native test runner compatible with the Next.js/TypeScript stack |
+| E2E Testing | Playwright | Cross-browser end-to-end testing for critical user flows |
 | Deployment | Azure Container Apps | Containerized hosting via Container Registry, Managed Identity with AcrPull role, Consumption plan, deployed via `azd up` |
 
 ### 7.2 Architecture Diagram
