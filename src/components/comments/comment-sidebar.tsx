@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCommentStore } from "@/stores/comment-store";
+import { useEditorStore } from "@/stores/editor-store";
 import { CommentThreadCard } from "./comment-thread-card";
 import { CommentSearch } from "./comment-search";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,8 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
     updateThread,
   } = useCommentStore();
 
+  const content = useEditorStore((s) => s.content);
+
   const filteredThreads = useMemo(() => {
     return threads.filter((t) => {
       // Status filter
@@ -94,7 +97,18 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
     [threads, orphanedThreadIds]
   );
 
-  const textThreads = filteredThreads.filter((t) => t.anchor.type === "text-range");
+  const textThreads = useMemo(() => {
+    const filtered = filteredThreads.filter((t) => t.anchor.type === "text-range");
+    if (!content) return filtered;
+    return [...filtered].sort((a, b) => {
+      const posA = a.anchor.selectedText ? content.indexOf(a.anchor.selectedText) : -1;
+      const posB = b.anchor.selectedText ? content.indexOf(b.anchor.selectedText) : -1;
+      if (posA === -1 && posB === -1) return 0;
+      if (posA === -1) return 1;
+      if (posB === -1) return -1;
+      return posA - posB;
+    });
+  }, [filteredThreads, content]);
   const docThreads = filteredThreads.filter((t) => t.anchor.type === "document");
 
   const openCount = threads.filter((t) => t.status === "open").length;
@@ -251,7 +265,7 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Filter comments">
                 <Filter className="size-3.5" />
               </Button>
             </DropdownMenuTrigger>
@@ -272,6 +286,7 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
             size="sm"
             className="h-7 w-7 p-0"
             onClick={() => setSidebarOpen(false)}
+            title="Close sidebar"
           >
             <X className="size-3.5" />
           </Button>
@@ -401,6 +416,7 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
               size="sm"
               className="w-full text-xs gap-1.5 text-muted-foreground"
               onClick={() => setShowDocInput(true)}
+              title="Add a comment about the whole document"
             >
               <Plus className="size-3" />
               Add general comment

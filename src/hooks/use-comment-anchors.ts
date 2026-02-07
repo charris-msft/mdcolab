@@ -84,7 +84,16 @@ export function useCommentAnchors(editor: Editor | null) {
 
   // Scroll to the anchored text when a comment is clicked (activeThreadId changes)
   useEffect(() => {
-    if (!editor || !activeThreadId) return;
+    if (!editor) return;
+
+    const editorEl = editor.view.dom;
+
+    // Remove active class from all comment marks
+    editorEl.querySelectorAll('.active-comment').forEach(el => {
+      el.classList.remove('active-comment');
+    });
+
+    if (!activeThreadId) return;
 
     // Find the comment mark in the document
     const markType = editor.schema.marks.commentMark;
@@ -113,7 +122,36 @@ export function useCommentAnchors(editor: Editor | null) {
             ? domPos.node
             : domPos.node.parentElement;
         element?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+        // Add active class to all spans with this threadId
+        const commentSpans = editorEl.querySelectorAll(`[data-comment-mark="${activeThreadId}"]`);
+        commentSpans.forEach(el => el.classList.add('active-comment'));
+
+        // Fallback: if no data attribute found, highlight the element itself
+        if (commentSpans.length === 0 && element) {
+          element.classList.add('active-comment');
+        }
       }
     }
   }, [editor, activeThreadId]);
+
+  // Click on highlighted text in the document activates the corresponding comment
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const commentSpan = target.closest('[data-comment-mark]') as HTMLElement;
+      if (commentSpan) {
+        const threadId = commentSpan.getAttribute('data-comment-mark');
+        if (threadId) {
+          useCommentStore.getState().setActiveThread(threadId);
+          useCommentStore.getState().setSidebarOpen(true);
+        }
+      }
+    };
+
+    editor.view.dom.addEventListener('click', handleClick);
+    return () => editor.view.dom.removeEventListener('click', handleClick);
+  }, [editor]);
 }

@@ -45,6 +45,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         className="h-8 w-8 min-h-[32px] min-w-[32px]"
         onClick={() => editor.chain().focus().undo().run()}
         disabled={!editor.can().undo()}
+        title="Undo (Ctrl+Z)"
       >
         <Undo className="h-4 w-4" />
       </Button>
@@ -54,6 +55,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         className="h-8 w-8 min-h-[32px] min-w-[32px]"
         onClick={() => editor.chain().focus().redo().run()}
         disabled={!editor.can().redo()}
+        title="Redo (Ctrl+Y)"
       >
         <Redo className="h-4 w-4" />
       </Button>
@@ -66,6 +68,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         pressed={editor.isActive("bold")}
         onPressedChange={() => editor.chain().focus().toggleBold().run()}
         aria-label="Bold"
+        title="Bold (Ctrl+B)"
         className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Bold className="h-4 w-4" />
@@ -75,6 +78,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         pressed={editor.isActive("italic")}
         onPressedChange={() => editor.chain().focus().toggleItalic().run()}
         aria-label="Italic"
+        title="Italic (Ctrl+I)"
         className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Italic className="h-4 w-4" />
@@ -84,6 +88,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         pressed={editor.isActive("strike")}
         onPressedChange={() => editor.chain().focus().toggleStrike().run()}
         aria-label="Strikethrough"
+        title="Strikethrough"
         className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Strikethrough className="h-4 w-4" />
@@ -93,6 +98,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         pressed={editor.isActive("code")}
         onPressedChange={() => editor.chain().focus().toggleCode().run()}
         aria-label="Code"
+        title="Inline code (Ctrl+E)"
         className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Code className="h-4 w-4" />
@@ -108,6 +114,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleHeading({ level: 1 }).run()
         }
         aria-label="Heading 1"
+        title="Heading 1"
         className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Heading1 className="h-4 w-4" />
@@ -119,6 +126,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleHeading({ level: 2 }).run()
         }
         aria-label="Heading 2"
+        title="Heading 2"
         className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Heading2 className="h-4 w-4" />
@@ -130,6 +138,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleHeading({ level: 3 }).run()
         }
         aria-label="Heading 3"
+        title="Heading 3"
         className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Heading3 className="h-4 w-4" />
@@ -145,6 +154,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleBulletList().run()
         }
         aria-label="Bullet list"
+        title="Bullet list"
         className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <List className="h-4 w-4" />
@@ -156,6 +166,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleOrderedList().run()
         }
         aria-label="Numbered list"
+        title="Numbered list"
         className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <ListOrdered className="h-4 w-4" />
@@ -167,6 +178,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleTaskList().run()
         }
         aria-label="Task list"
+        title="Task list"
         className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <ListTodo className="h-4 w-4" />
@@ -182,6 +194,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           editor.chain().focus().toggleBlockquote().run()
         }
         aria-label="Blockquote"
+        title="Blockquote"
         className="h-8 w-8 min-h-[32px] min-w-[32px] p-0"
       >
         <Quote className="h-4 w-4" />
@@ -192,6 +205,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         className="h-8 w-8 min-h-[32px] min-w-[32px]"
         onClick={() => editor.chain().focus().setHorizontalRule().run()}
         aria-label="Horizontal rule"
+        title="Horizontal rule"
       >
         <Minus className="h-4 w-4" />
       </Button>
@@ -207,6 +221,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
             .run()
         }
         aria-label="Insert table"
+        title="Insert table"
       >
         <TableIcon className="h-4 w-4" />
       </Button>

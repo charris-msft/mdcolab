@@ -38,6 +38,7 @@ export function BubbleToolbar({ editor, editable = false, onCreateComment }: Bub
             size="sm"
             pressed={editor.isActive("bold")}
             onPressedChange={() => editor.chain().focus().toggleBold().run()}
+            title="Bold (Ctrl+B)"
             className="h-8 w-8 p-0 data-[state=on]:bg-primary/20"
           >
             <Bold className="h-3.5 w-3.5" />
@@ -46,6 +47,7 @@ export function BubbleToolbar({ editor, editable = false, onCreateComment }: Bub
             size="sm"
             pressed={editor.isActive("italic")}
             onPressedChange={() => editor.chain().focus().toggleItalic().run()}
+            title="Italic (Ctrl+I)"
             className="h-8 w-8 p-0 data-[state=on]:bg-primary/20"
           >
             <Italic className="h-3.5 w-3.5" />
@@ -54,6 +56,7 @@ export function BubbleToolbar({ editor, editable = false, onCreateComment }: Bub
             size="sm"
             pressed={editor.isActive("strike")}
             onPressedChange={() => editor.chain().focus().toggleStrike().run()}
+            title="Strikethrough"
             className="h-8 w-8 p-0 data-[state=on]:bg-primary/20"
           >
             <Strikethrough className="h-3.5 w-3.5" />
@@ -62,6 +65,7 @@ export function BubbleToolbar({ editor, editable = false, onCreateComment }: Bub
             size="sm"
             pressed={editor.isActive("code")}
             onPressedChange={() => editor.chain().focus().toggleCode().run()}
+            title="Inline code"
             className="h-8 w-8 p-0 data-[state=on]:bg-primary/20"
           >
             <Code className="h-3.5 w-3.5" />
@@ -73,6 +77,7 @@ export function BubbleToolbar({ editor, editable = false, onCreateComment }: Bub
             size="sm"
             pressed={editor.isActive("highlight")}
             onPressedChange={() => editor.chain().focus().toggleHighlight().run()}
+            title="Highlight"
             className="h-8 w-8 p-0 data-[state=on]:bg-yellow-500/20"
           >
             <Highlighter className="h-3.5 w-3.5" />

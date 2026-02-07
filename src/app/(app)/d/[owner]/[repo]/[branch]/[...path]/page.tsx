@@ -42,6 +42,7 @@ import { useKeyboardShortcuts, SHORTCUTS } from "@/hooks/use-keyboard-shortcuts"
 import { useCommentNavigation } from "@/hooks/use-comment-navigation";
 import { TrackChangesToggle } from "@/components/editor/track-changes-toggle";
 import { TrackChangesPanel } from "@/components/editor/track-changes-panel";
+import { addRecentDoc } from "@/lib/recent-docs";
 
 export default function DocumentPage() {
   const params = useParams<{
@@ -128,8 +129,15 @@ export default function DocumentPage() {
       setFileSha(fileData.sha);
       setFilePath(filePath);
       setDirty(false);
+      addRecentDoc({
+        owner,
+        repo,
+        branch,
+        path: filePath,
+        fileName,
+      });
     }
-  }, [fileData, filePath, setFileSha, setFilePath, setDirty]);
+  }, [fileData, filePath, setFileSha, setFilePath, setDirty, owner, repo, branch, fileName]);
 
   // Save mutation
   const saveMutation = useMutation({

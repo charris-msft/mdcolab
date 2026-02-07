@@ -57,6 +57,7 @@ export const CommentMark = Mark.create<CommentMarkOptions>({
       "span",
       mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
         class: classes,
+        "data-comment-mark": HTMLAttributes["data-thread-id"],
       }),
       0,
     ];

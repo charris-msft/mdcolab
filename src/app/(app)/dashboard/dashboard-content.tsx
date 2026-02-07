@@ -1,10 +1,12 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import { Star, Clock, FileText, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { GitHubRepo } from "@/types";
+import { getRecentDocs, type RecentDoc } from "@/lib/recent-docs";
 
 function formatRelativeTime(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -32,6 +34,11 @@ const languageColors: Record<string, string> = {
 
 export function DashboardContent() {
   const { data: session } = useSession();
+  const [recentDocs, setRecentDocs] = useState<RecentDoc[]>([]);
+
+  useEffect(() => {
+    setRecentDocs(getRecentDocs());
+  }, []);
 
   const { data: repos, isLoading, error } = useQuery<GitHubRepo[]>({
     queryKey: ["repos"],
@@ -63,22 +70,47 @@ export function DashboardContent() {
         </div>
       </div>
 
-      {/* Recent Documents (placeholder) */}
+      {/* Recent Documents */}
       <section>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Recent Documents</h2>
         </div>
-        <div className="flex items-center justify-center rounded-lg border border-dashed border-border py-12">
-          <div className="text-center">
-            <FileText className="mx-auto h-10 w-10 text-muted-foreground/50" />
-            <p className="mt-2 text-sm text-muted-foreground">
-              No recent documents yet
-            </p>
-            <p className="text-xs text-muted-foreground/70">
-              Open a markdown file from one of your repos to get started
-            </p>
+        {recentDocs.length === 0 ? (
+          <div className="flex items-center justify-center rounded-lg border border-dashed border-border py-12">
+            <div className="text-center">
+              <FileText className="mx-auto h-10 w-10 text-muted-foreground/50" />
+              <p className="mt-2 text-sm text-muted-foreground">
+                No recent documents yet
+              </p>
+              <p className="text-xs text-muted-foreground/70">
+                Open a markdown file from one of your repos to get started
+              </p>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {recentDocs.map((doc) => (
+              <Link
+                key={`${doc.owner}/${doc.repo}/${doc.path}`}
+                href={`/d/${doc.owner}/${doc.repo}/${doc.branch}/${doc.path}`}
+                className="group flex items-start gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:bg-card/80"
+              >
+                <FileText className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground group-hover:text-primary" />
+                <div className="min-w-0">
+                  <p className="font-medium text-foreground truncate group-hover:text-primary">
+                    {doc.fileName}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {doc.owner}/{doc.repo}
+                  </p>
+                  <p className="text-xs text-muted-foreground/70">
+                    {formatRelativeTime(doc.accessedAt)}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Repositories */}
@@ -120,7 +152,7 @@ export function DashboardContent() {
               >
                 <div className="flex items-start justify-between">
                   <h3 className="font-semibold text-foreground group-hover:text-primary">
-                    {repo.name}
+                    <span className="text-muted-foreground font-normal">{repo.owner.login}/</span>{repo.name}
                   </h3>
                   {repo.private && (
                     <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
