@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import packageJson from "../../../../../package.json";
 
 const START_TIMEOUT_MS = 15_000; // 15s max to start CLI
 const SESSION_TIMEOUT_MS = 15_000; // 15s max to create session
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. Parse request body
-  const { prompt, documentContent, history } = await req.json();
+  const { prompt, documentContent, history, selectedText } = await req.json();
   if (!prompt) {
     return NextResponse.json(
       { error: "Prompt is required" },
@@ -50,10 +51,15 @@ export async function POST(req: NextRequest) {
   }
 
   // 4. Create a client authenticated with the user's GitHub token
+  // TODO: Pass client identifier once @github/copilot-sdk supports it.
+  // CopilotClientOptions has no clientName/editorInfo field yet (SDK is in
+  // technical preview).  When a field is added, use:
+  //   clientName: "mdcolab", clientVersion: packageJson.version
   const client = new CopilotClient({
     githubToken: session.accessToken,
     useLoggedInUser: false,
   });
+  console.log(`[AI] mdcolab v${packageJson.version} — creating Copilot client`);
 
   try {
     // 5. Explicitly start the CLI subprocess (with timeout)
@@ -68,7 +74,7 @@ export async function POST(req: NextRequest) {
       streaming: true,
       systemMessage: {
         mode: "append",
-        content: buildSystemPrompt(documentContent, history),
+        content: buildSystemPrompt(documentContent, history, selectedText),
       },
       availableTools: [],
     }), SESSION_TIMEOUT_MS, "Session creation");
@@ -187,6 +193,7 @@ export async function POST(req: NextRequest) {
 function buildSystemPrompt(
   documentContent?: string,
   history?: Array<{ role: string; content: string }>,
+  selectedText?: string,
 ): string {
   let prompt = `You are **mdcolab AI**, a markdown writing assistant embedded in a collaborative document editing application.
 
@@ -233,6 +240,10 @@ You help users with:
 
   if (documentContent) {
     prompt += `\n\nThe user is currently working on this document:\n\n---\n${documentContent}\n---\n\nRefer to this document when the user asks about "this document", "the text", "this section", etc.`;
+  }
+
+  if (selectedText) {
+    prompt += `\n\nThe user currently has the following text selected in the editor:\n\n> ${selectedText}\n\nWhen the user refers to "this text", "the selection", "selected text", etc., they mean the text above.`;
   }
 
   if (history?.length) {

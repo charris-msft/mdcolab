@@ -12,7 +12,6 @@ import { slideInRight } from "@/lib/animations";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  Sparkles,
   X,
   ArrowUp,
   Trash2,
@@ -24,6 +23,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+import { CopilotIcon } from "@/components/icons/copilot-icon";
 
 interface AIChatPanelProps {
   documentContent?: string;
@@ -44,24 +44,22 @@ function extractCodeFenceContent(content: string): string {
   return match ? match[1].trim() : content;
 }
 
-/** Check if message contains a markdown code fence */
-function hasCodeFence(content: string): boolean {
-  return /```[\w]*\n[\s\S]*?```/.test(content);
-}
-
 function MessageActions({ message }: { message: AIMessage }) {
   const editor = useEditorStore((s) => s.editor);
   const [copied, setCopied] = useState(false);
 
   const contentToInsert = extractCodeFenceContent(message.content);
 
-  const parseMarkdownToHtml = useCallback(
-    (markdown: string): string => {
+  const parseMarkdownContent = useCallback(
+    (markdown: string) => {
       if (!editor) return markdown;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const parser = (editor.storage as any).markdown?.parser;
       if (parser) {
-        return parser.parse(markdown) as string;
+        const doc = parser.parse(markdown);
+        if (doc && doc.content) {
+          return doc.content.toJSON();
+        }
       }
       return markdown;
     },
@@ -73,27 +71,26 @@ function MessageActions({ message }: { message: AIMessage }) {
       toast.error("Editor not available");
       return;
     }
-    const html = parseMarkdownToHtml(contentToInsert);
-    editor.chain().focus().insertContent(html).run();
+    const content = parseMarkdownContent(contentToInsert);
+    editor.chain().focus().insertContent(content).run();
     toast.success("Inserted at cursor");
-  }, [editor, contentToInsert, parseMarkdownToHtml]);
+  }, [editor, contentToInsert, parseMarkdownContent]);
 
   const handleReplaceSelection = useCallback(() => {
     if (!editor) {
       toast.error("Editor not available");
       return;
     }
-    const html = parseMarkdownToHtml(contentToInsert);
+    const content = parseMarkdownContent(contentToInsert);
     const { from, to } = editor.state.selection;
     if (from === to) {
-      // No selection — insert at cursor instead
-      editor.chain().focus().insertContent(html).run();
+      editor.chain().focus().insertContent(content).run();
       toast.success("Inserted at cursor (no selection)");
     } else {
-      editor.chain().focus().deleteSelection().insertContent(html).run();
+      editor.chain().focus().deleteSelection().insertContent(content).run();
       toast.success("Selection replaced");
     }
-  }, [editor, contentToInsert, parseMarkdownToHtml]);
+  }, [editor, contentToInsert, parseMarkdownContent]);
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(contentToInsert);
@@ -150,6 +147,7 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
   } = useAIStore();
 
   const { sendMessage } = useAIChat(documentContent);
+  const selectedText = useEditorStore((s) => s.selectedText);
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -221,8 +219,8 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-purple-400" />
-          <h2 className="text-sm font-semibold">AI Assistant</h2>
+          <CopilotIcon className="size-4 text-purple-400" />
+          <h2 className="text-sm font-semibold">Copilot</h2>
         </div>
         <div className="flex items-center gap-1">
           <Button
@@ -307,7 +305,7 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
             /* Empty state */
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
               <div className="size-10 rounded-full bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-3">
-                <Sparkles className="size-5 text-purple-400" />
+                <CopilotIcon className="size-5 text-purple-400" />
               </div>
               <p className="text-sm font-medium text-muted-foreground">
                 How can I help?
@@ -359,8 +357,7 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
                     )}
                     {msg.role === "assistant" &&
                       !msg.isStreaming &&
-                      msg.content &&
-                      hasCodeFence(msg.content) && (
+                      msg.content.trim() && (
                         <MessageActions message={msg} />
                       )}
                   </div>
@@ -388,13 +385,24 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
 
       {/* Input area */}
       <div className="p-3">
+        {selectedText && (
+          <div className="mb-2 px-2 py-1.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 flex items-center gap-1.5 truncate">
+            <span>📌</span>
+            <span className="truncate">
+              &quot;{selectedText.length > 50 ? selectedText.slice(0, 50) + "…" : selectedText}&quot;
+            </span>
+            <span className="shrink-0 text-purple-400/60">
+              ({selectedText.length} chars)
+            </span>
+          </div>
+        )}
         <div className="relative flex items-end gap-2">
           <textarea
             ref={textareaRef}
             value={input}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask AI to help you write..."
+            placeholder="Ask Copilot to help you write..."
             rows={1}
             className="flex-1 min-h-[36px] max-h-[120px] resize-none text-sm bg-transparent border border-border/50 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-purple-500/50 placeholder:text-muted-foreground/50"
           />

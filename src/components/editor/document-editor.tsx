@@ -45,7 +45,7 @@ export function DocumentEditor({
   className,
   author,
 }: DocumentEditorProps) {
-  const { isDirty, setDirty, setContent, setEditable, setEditor } = useEditorStore();
+  const { isDirty, setDirty, setContent, setEditable, setEditor, setSelectedText } = useEditorStore();
   const editorInteracted = useRef(false);
 
   const editor = useEditor({
@@ -113,6 +113,11 @@ export function DocumentEditor({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const markdown = (editor.storage as any).markdown.getMarkdown() as string;
       setContent(markdown);
+    },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection;
+      const text = from !== to ? editor.state.doc.textBetween(from, to, '\n') : '';
+      setSelectedText(text);
     },
   });
 

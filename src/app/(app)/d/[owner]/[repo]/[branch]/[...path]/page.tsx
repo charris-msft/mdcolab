@@ -23,8 +23,8 @@ import {
   Check,
   Loader2,
   RefreshCw,
-  Sparkles,
 } from "lucide-react";
+import { CopilotIcon } from "@/components/icons/copilot-icon";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommentSidebar } from "@/components/comments/comment-sidebar";
@@ -358,10 +358,10 @@ export default function DocumentPage() {
                 className={`gap-1.5 ${isAIOpen ? "bg-accent text-accent-foreground" : ""}`}
                 onClick={toggleAIPanel}
               >
-                <Sparkles className="h-4 w-4" />
+                <CopilotIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>AI Assistant (⌘J)</TooltipContent>
+            <TooltipContent>Copilot (⌘J)</TooltipContent>
           </Tooltip>
 
           {/* Comment count */}

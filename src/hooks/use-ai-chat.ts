@@ -1,9 +1,11 @@
 import { useCallback } from "react";
 import { useAIStore } from "@/stores/ai-store";
+import { useEditorStore } from "@/stores/editor-store";
 
 export function useAIChat(documentContent?: string) {
   const { addMessage, updateMessage, setStreaming, setLoading, setError, messages } =
     useAIStore();
+  const selectedText = useEditorStore((s) => s.selectedText);
 
   const sendMessage = useCallback(
     async (prompt: string) => {
@@ -33,7 +35,7 @@ export function useAIChat(documentContent?: string) {
         const response = await fetch("/api/ai/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, documentContent, history }),
+          body: JSON.stringify({ prompt, documentContent, history, selectedText }),
         });
 
         if (!response.ok) {
@@ -89,7 +91,7 @@ export function useAIChat(documentContent?: string) {
         setLoading(false);
       }
     },
-    [documentContent, messages, addMessage, updateMessage, setStreaming, setLoading, setError],
+    [documentContent, selectedText, messages, addMessage, updateMessage, setStreaming, setLoading, setError],
   );
 
   return { sendMessage };

@@ -7,6 +7,7 @@ interface EditorState {
   isDirty: boolean;
   isSaving: boolean;
   content: string;
+  selectedText: string;
   filePath: string;
   fileSha: string | null;
   showTrackChanges: boolean;
@@ -15,6 +16,7 @@ interface EditorState {
   setDirty: (dirty: boolean) => void;
   setSaving: (saving: boolean) => void;
   setContent: (content: string) => void;
+  setSelectedText: (text: string) => void;
   setFilePath: (path: string) => void;
   setFileSha: (sha: string | null) => void;
   setShowTrackChanges: (show: boolean) => void;
@@ -26,6 +28,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   isDirty: false,
   isSaving: false,
   content: "",
+  selectedText: "",
   filePath: "",
   fileSha: null,
   showTrackChanges: false,
@@ -34,6 +37,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   setDirty: (dirty) => set({ isDirty: dirty }),
   setSaving: (saving) => set({ isSaving: saving }),
   setContent: (content) => set({ content }),
+  setSelectedText: (text) => set({ selectedText: text }),
   setFilePath: (path) => set({ filePath: path }),
   setFileSha: (sha) => set({ fileSha: sha }),
   setShowTrackChanges: (show) => set({ showTrackChanges: show }),
