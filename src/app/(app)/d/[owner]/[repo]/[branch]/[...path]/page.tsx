@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useEditorStore } from "@/stores/editor-store";
 import { useCommentStore } from "@/stores/comment-store";
+import { useAIStore } from "@/stores/ai-store";
 import { DocumentEditor } from "@/components/editor";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,10 +23,12 @@ import {
   Check,
   Loader2,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommentSidebar } from "@/components/comments/comment-sidebar";
+import { AIChatPanel } from "@/components/ai/ai-chat-panel";
 import {
   Sheet,
   SheetContent,
@@ -62,9 +65,10 @@ export default function DocumentPage() {
     login: (sessionAny?.login as string) ?? session?.user?.name ?? "anonymous",
     avatarUrl: session?.user?.image ?? "",
   };
-  const { isDirty, isSaving, setDirty, setSaving, setFilePath, setFileSha, fileSha } =
+  const { isDirty, isSaving, setDirty, setSaving, setFilePath, setFileSha, fileSha, content: editorContent } =
     useEditorStore();
   const { threads, isSidebarOpen, setSidebarOpen } = useCommentStore();
+  const { isOpen: isAIOpen, togglePanel: toggleAIPanel } = useAIStore();
 
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -214,8 +218,12 @@ export default function DocumentPage() {
         ...SHORTCUTS.ESCAPE,
         handler: () => setSidebarOpen(false),
       },
+      {
+        ...SHORTCUTS.AI_PANEL,
+        handler: () => toggleAIPanel(),
+      },
     ],
-    [handleSave, setSidebarOpen, isSidebarOpen, nextComment, prevComment]
+    [handleSave, setSidebarOpen, isSidebarOpen, nextComment, prevComment, toggleAIPanel]
   );
   useKeyboardShortcuts(shortcuts);
 
@@ -341,6 +349,21 @@ export default function DocumentPage() {
             </TooltipContent>
           </Tooltip>
 
+          {/* AI Assistant */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`gap-1.5 ${isAIOpen ? "bg-accent text-accent-foreground" : ""}`}
+                onClick={toggleAIPanel}
+              >
+                <Sparkles className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>AI Assistant (⌘J)</TooltipContent>
+          </Tooltip>
+
           {/* Comment count */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -462,6 +485,11 @@ export default function DocumentPage() {
           <aside className="w-80 border-l border-border overflow-y-auto shrink-0 comment-sidebar">
             <CommentSidebar hasIssues={hasIssues} />
           </aside>
+        )}
+
+        {/* AI Chat Panel */}
+        {isAIOpen && (
+          <AIChatPanel documentContent={editorContent || fileData.content} />
         )}
 
         {isMobile && (

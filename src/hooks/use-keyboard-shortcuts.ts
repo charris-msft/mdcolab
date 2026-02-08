@@ -47,4 +47,5 @@ export const SHORTCUTS = {
   PREV_COMMENT: { key: "ArrowUp", ctrl: true, alt: true, description: "Previous comment" },
   TOGGLE_SIDEBAR: { key: "b", ctrl: true, shift: true, description: "Toggle sidebar" },
   ESCAPE: { key: "Escape", description: "Close panels" },
+  AI_PANEL: { key: "j", ctrl: true, description: "AI Assistant" },
 } as const;

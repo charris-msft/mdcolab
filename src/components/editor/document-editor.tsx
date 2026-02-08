@@ -45,7 +45,7 @@ export function DocumentEditor({
   className,
   author,
 }: DocumentEditorProps) {
-  const { isDirty, setDirty, setContent, setEditable } = useEditorStore();
+  const { isDirty, setDirty, setContent, setEditable, setEditor } = useEditorStore();
   const editorInteracted = useRef(false);
 
   const editor = useEditor({
@@ -125,6 +125,14 @@ export function DocumentEditor({
 
   // Apply comment marks and handle click-to-scroll
   useCommentAnchors(editor);
+
+  // Expose editor instance to store for cross-component access
+  useEffect(() => {
+    if (editor) {
+      setEditor(editor);
+    }
+    return () => setEditor(null);
+  }, [editor, setEditor]);
 
   // Sync editable state
   useEffect(() => {
