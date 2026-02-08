@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
+const RESPONSE_TIMEOUT_MS = 60_000; // 60s max wait for first token
+
 // POST /api/ai/chat
 // Body: { prompt: string, documentContent?: string, history?: Array<{role: string, content: string}> }
 // Returns: SSE stream with text chunks
@@ -24,11 +26,12 @@ export async function POST(req: NextRequest) {
   }
 
   // 3. Import CopilotClient dynamically (ESM-only package)
-  let CopilotClient: typeof import("@github/copilot-sdk").CopilotClient;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let CopilotClient: any;
   try {
     ({ CopilotClient } = await import("@github/copilot-sdk"));
   } catch (err: unknown) {
-    console.error("Failed to load @github/copilot-sdk:", err);
+    console.error("[AI] Failed to load @github/copilot-sdk:", err);
     return NextResponse.json(
       { error: "AI features are not available on this server" },
       { status: 503 },
@@ -42,7 +45,12 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    // 5. Create a streaming session — disable all built-in tools for chat-only use
+    // 5. Explicitly start the CLI subprocess
+    console.log("[AI] Starting Copilot CLI...");
+    await client.start();
+    console.log("[AI] Copilot CLI started, creating session...");
+
+    // 6. Create a streaming session
     const copilotSession = await client.createSession({
       model: "gpt-4.1",
       streaming: true,
@@ -52,29 +60,52 @@ export async function POST(req: NextRequest) {
       },
       availableTools: [],
     });
+    console.log("[AI] Session created, sending prompt...");
 
-    // 6. Stream the response as SSE
+    // 7. Stream the response as SSE
+    let closed = false;
     const stream = new ReadableStream({
       start(controller) {
         const encoder = new TextEncoder();
 
         const enqueue = (payload: Record<string, unknown>) => {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(payload)}\n\n`),
-          );
+          if (closed) return;
+          try {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(payload)}\n\n`),
+            );
+          } catch {
+            // Stream already closed by client disconnect
+          }
         };
 
+        const finish = (cleanup = true) => {
+          if (closed) return;
+          closed = true;
+          clearTimeout(timeout);
+          try { controller.close(); } catch { /* already closed */ }
+          if (cleanup) client.stop().catch(() => {});
+        };
+
+        // Timeout: if no events fire within 60s, close with error
+        const timeout = setTimeout(() => {
+          console.error("[AI] Response timeout — no events received");
+          enqueue({ error: "AI response timed out. Please try again." });
+          finish();
+        }, RESPONSE_TIMEOUT_MS);
+
         // Streaming text deltas
-        copilotSession.on("assistant.message_delta", (event) => {
+        copilotSession.on("assistant.message_delta", (event: { data: { deltaContent?: string } }) => {
           if (event.data.deltaContent) {
             enqueue({ content: event.data.deltaContent });
           }
         });
 
         // Session errors
-        copilotSession.on("session.error", (event) => {
+        copilotSession.on("session.error", (event: { data: { message?: string; statusCode?: number } }) => {
           const msg = event.data.message || "AI request failed";
           const status = event.data.statusCode;
+          console.error("[AI] Session error:", msg, "status:", status);
           const isCopilotError =
             status === 401 ||
             status === 403 ||
@@ -85,23 +116,34 @@ export async function POST(req: NextRequest) {
               ? "GitHub Copilot subscription required. Enable Copilot at github.com/settings/copilot"
               : msg,
           });
-          controller.close();
-          cleanup();
+          finish();
         });
 
         // Completion
         copilotSession.on("session.idle", () => {
+          console.log("[AI] Session idle — response complete");
           enqueue({ done: true });
-          controller.close();
-          cleanup();
+          finish();
         });
 
-        // Send the user's prompt (non-blocking — events drive the stream)
-        copilotSession.send({ prompt }).catch((err: Error) => {
-          enqueue({ error: err.message || "Failed to send prompt" });
-          controller.close();
-          cleanup();
+        // Catch-all for any events (debugging)
+        copilotSession.on((event: { type: string }) => {
+          console.log("[AI] Event:", event.type);
         });
+
+        // Send the user's prompt
+        copilotSession.send({ prompt }).catch((err: Error) => {
+          console.error("[AI] Send error:", err.message);
+          enqueue({ error: err.message || "Failed to send prompt" });
+          finish();
+        });
+      },
+      cancel() {
+        // Client disconnected
+        if (!closed) {
+          closed = true;
+          client.stop().catch(() => {});
+        }
       },
     });
 
@@ -115,23 +157,18 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "Failed to connect to AI service";
-    console.error("AI chat error:", message);
+    console.error("[AI] Chat error:", message);
 
-    // Copilot CLI not installed / not found
+    client.stop().catch(() => {});
+
     if (/not found|ENOENT|spawn/i.test(message)) {
-      cleanup();
       return NextResponse.json(
-        { error: "AI features are not available on this server" },
+        { error: "AI features are not available on this server. The Copilot CLI may not be installed." },
         { status: 503 },
       );
     }
 
-    cleanup();
     return NextResponse.json({ error: message }, { status: 500 });
-  }
-
-  function cleanup() {
-    client.stop().catch(() => {});
   }
 }
 
