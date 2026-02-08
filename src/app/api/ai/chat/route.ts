@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. Parse request body
-  const { prompt, documentContent, history, selectedText } = await req.json();
+  const { prompt, documentContent, history, selectedText, mode } = await req.json();
   if (!prompt) {
     return NextResponse.json(
       { error: "Prompt is required" },
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       streaming: true,
       systemMessage: {
         mode: "append",
-        content: buildSystemPrompt(documentContent, history, selectedText),
+        content: buildSystemPrompt(documentContent, history, selectedText, mode),
       },
       availableTools: [],
     }), SESSION_TIMEOUT_MS, "Session creation");
@@ -194,6 +194,7 @@ function buildSystemPrompt(
   documentContent?: string,
   history?: Array<{ role: string; content: string }>,
   selectedText?: string,
+  mode?: string,
 ): string {
   let prompt = `You are **mdcolab AI**, a markdown writing assistant embedded in a collaborative document editing application.
 
@@ -208,13 +209,33 @@ You help users with:
 - **Expanding** brief points into detailed explanations.
 - **Markdown formatting**: creating tables, lists, code blocks, task lists, and other GFM elements.
 
+## Direct Editing
+
+When the user asks you to make a specific change to the document (e.g., "change X to Y", "remove this paragraph", "add a section about Z after the introduction"), respond with a structured edit block:
+
+\`\`\`edit
+<<<< SEARCH
+[exact text to find in the document]
+>>>>
+<<<< REPLACE
+[replacement text]
+>>>>
+\`\`\`
+
+- The SEARCH block must contain text that exists verbatim in the document.
+- The REPLACE block contains what should replace it.
+- For deletions, leave the REPLACE block empty.
+- For insertions, use a SEARCH block that finds the location, and include the original text plus new content in REPLACE.
+- You may include multiple edit blocks in one response for multi-part changes.
+- After the edit block(s), briefly explain what you changed.
+
 ## Response Format Rules
 
 1. When providing content the user should insert into their document, wrap it in a fenced code block labeled \`markdown\` so it is easy to copy:
    \`\`\`markdown
    Your content here
    \`\`\`
-2. When suggesting edits, show **before** and **after** so the change is clear.
+2. When the user asks for a specific document change, use the edit block format above instead of showing before/after.
 3. For short responses (explanations, answers to questions, brief feedback), respond in plain text without code fences.
 4. Be concise — prefer shorter responses unless the user explicitly asks for detail or the task requires it.
 
@@ -237,6 +258,12 @@ You help users with:
 - Be helpful and direct, not verbose.
 - When asked to write or edit content, provide the actual text — not meta-instructions about how to write it.
 - When making suggestions, explain briefly why.`;
+
+  if (mode === "review") {
+    prompt += `\n\n## Mode: Review
+
+The user is in **Review mode**. You can answer questions about the document, explain content, and provide feedback. Do **NOT** use edit blocks — the user cannot edit in this mode. If the user asks for changes, let them know they need to switch to Edit mode first.`;
+  }
 
   if (documentContent) {
     prompt += `\n\nThe user is currently working on this document:\n\n---\n${documentContent}\n---\n\nRefer to this document when the user asks about "this document", "the text", "this section", etc.`;

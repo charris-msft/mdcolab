@@ -6,6 +6,7 @@ export function useAIChat(documentContent?: string) {
   const { addMessage, updateMessage, setStreaming, setLoading, setError, messages } =
     useAIStore();
   const selectedText = useEditorStore((s) => s.selectedText);
+  const isEditable = useEditorStore((s) => s.isEditable);
 
   const sendMessage = useCallback(
     async (prompt: string) => {
@@ -35,7 +36,7 @@ export function useAIChat(documentContent?: string) {
         const response = await fetch("/api/ai/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, documentContent, history, selectedText }),
+          body: JSON.stringify({ prompt, documentContent, history, selectedText, mode: isEditable ? "edit" : "review" }),
         });
 
         if (!response.ok) {
@@ -91,7 +92,7 @@ export function useAIChat(documentContent?: string) {
         setLoading(false);
       }
     },
-    [documentContent, selectedText, messages, addMessage, updateMessage, setStreaming, setLoading, setError],
+    [documentContent, selectedText, isEditable, messages, addMessage, updateMessage, setStreaming, setLoading, setError],
   );
 
   return { sendMessage };

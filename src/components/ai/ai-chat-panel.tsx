@@ -22,6 +22,7 @@ import {
   Replace,
   Copy,
   Check,
+  Wand2,
 } from "lucide-react";
 import { CopilotIcon } from "@/components/icons/copilot-icon";
 
@@ -44,8 +45,139 @@ function extractCodeFenceContent(content: string): string {
   return match ? match[1].trim() : content;
 }
 
+interface EditBlock {
+  search: string;
+  replace: string;
+}
+
+function parseEditBlocks(content: string): EditBlock[] {
+  const blocks: EditBlock[] = [];
+  const regex = /```edit\s*\n<<<< SEARCH\n([\s\S]*?)>>>>\n<<<< REPLACE\s*\n([\s\S]*?)>>>>\s*\n```/g;
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    blocks.push({ search: match[1].trimEnd(), replace: match[2].trimEnd() });
+  }
+  return blocks;
+}
+
+/** Strip edit blocks from message content to show the explanation text only. */
+function stripEditBlocks(content: string): string {
+  return content
+    .replace(/```edit\s*\n<<<< SEARCH\n[\s\S]*?>>>>\n<<<< REPLACE\s*\n[\s\S]*?>>>>\s*\n```/g, "")
+    .trim();
+}
+
+function EditBlockDisplay({ blocks }: { blocks: EditBlock[] }) {
+  return (
+    <div className="mt-2 space-y-2">
+      {blocks.map((block, i) => (
+        <div
+          key={i}
+          className="rounded-md border border-border/50 bg-background/50 text-xs overflow-hidden"
+        >
+          {block.search && (
+            <div className="px-2 py-1.5 bg-red-500/5 border-b border-border/30">
+              <span className="text-red-400 font-mono line-through whitespace-pre-wrap break-words">
+                {block.search}
+              </span>
+            </div>
+          )}
+          {block.replace && (
+            <div className="px-2 py-1.5 bg-green-500/5">
+              <span className="text-green-400 font-mono whitespace-pre-wrap break-words">
+                {block.replace}
+              </span>
+            </div>
+          )}
+          {!block.replace && (
+            <div className="px-2 py-1 bg-red-500/5 text-red-400/60 italic">
+              (deleted)
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ApplyEditButton({ blocks }: { blocks: EditBlock[] }) {
+  const editor = useEditorStore((s) => s.editor);
+  const isEditable = useEditorStore((s) => s.isEditable);
+  const [applied, setApplied] = useState(false);
+
+  const handleApply = useCallback(() => {
+    if (!editor) {
+      toast.error("Editor not available");
+      return;
+    }
+    if (!isEditable) {
+      toast.error("Switch to Edit mode to apply changes");
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const storage = editor.storage as any;
+    let markdown: string =
+      storage.markdown?.getMarkdown?.() ??
+      useEditorStore.getState().content;
+
+    let appliedCount = 0;
+    let failedCount = 0;
+
+    for (const block of blocks) {
+      if (markdown.includes(block.search)) {
+        markdown = markdown.replace(block.search, block.replace);
+        appliedCount++;
+      } else {
+        failedCount++;
+      }
+    }
+
+    if (appliedCount > 0) {
+      editor.commands.setContent(markdown);
+      useEditorStore.getState().setContent(markdown);
+      useEditorStore.getState().setDirty(true);
+      setApplied(true);
+      toast.success(`Applied ${appliedCount} edit${appliedCount > 1 ? "s" : ""}`);
+      setTimeout(() => setApplied(false), 3000);
+    }
+
+    if (failedCount > 0) {
+      toast.warning(
+        `${failedCount} edit${failedCount > 1 ? "s" : ""} could not be applied — text not found in document`
+      );
+    }
+  }, [editor, isEditable, blocks]);
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className={cn(
+        "h-6 px-1.5 text-[10px] gap-1",
+        applied
+          ? "text-green-400"
+          : "text-purple-400 hover:text-purple-300"
+      )}
+      onClick={handleApply}
+      disabled={!isEditable || applied}
+      title={
+        !isEditable
+          ? "Switch to Edit mode to apply changes"
+          : applied
+            ? "Edit applied"
+            : "Apply edit to document"
+      }
+    >
+      {applied ? <Check className="size-3" /> : <Wand2 className="size-3" />}
+      {applied ? "Applied" : "Apply Edit"}
+    </Button>
+  );
+}
+
 function MessageActions({ message }: { message: AIMessage }) {
   const editor = useEditorStore((s) => s.editor);
+  const isEditable = useEditorStore((s) => s.isEditable);
   const [copied, setCopied] = useState(false);
 
   const contentToInsert = extractCodeFenceContent(message.content);
@@ -106,7 +238,8 @@ function MessageActions({ message }: { message: AIMessage }) {
         size="sm"
         className="h-6 px-1.5 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
         onClick={handleInsertAtCursor}
-        title="Insert at cursor position in editor"
+        disabled={!isEditable}
+        title={!isEditable ? "Switch to Edit mode to insert" : "Insert at cursor position in editor"}
       >
         <ClipboardPaste className="size-3" />
         Insert
@@ -116,7 +249,8 @@ function MessageActions({ message }: { message: AIMessage }) {
         size="sm"
         className="h-6 px-1.5 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
         onClick={handleReplaceSelection}
-        title="Replace selected text in editor"
+        disabled={!isEditable}
+        title={!isEditable ? "Switch to Edit mode to replace" : "Replace selected text in editor"}
       >
         <Replace className="size-3" />
         Replace
@@ -148,6 +282,7 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
 
   const { sendMessage } = useAIChat(documentContent);
   const selectedText = useEditorStore((s) => s.selectedText);
+  const isEditable = useEditorStore((s) => s.isEditable);
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -246,6 +381,13 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
       </div>
 
       <Separator />
+
+      {/* Review mode indicator */}
+      {!isEditable && (
+        <div className="mx-3 mt-2 px-2.5 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-300">
+          📖 Review mode — ask questions, but edits require Edit mode
+        </div>
+      )}
 
       {/* Error banner */}
       <AnimatePresence>
@@ -346,7 +488,21 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
                     )}
                   >
                     <p className="whitespace-pre-wrap break-words">
-                      {msg.content}
+                      {(() => {
+                        const editBlocks = msg.role === "assistant" ? parseEditBlocks(msg.content) : [];
+                        if (editBlocks.length > 0) {
+                          const explanation = stripEditBlocks(msg.content);
+                          return (
+                            <>
+                              <EditBlockDisplay blocks={editBlocks} />
+                              {explanation && (
+                                <span className="block mt-2">{explanation}</span>
+                              )}
+                            </>
+                          );
+                        }
+                        return msg.content;
+                      })()}
                     </p>
                     {msg.isStreaming && (
                       <span className="inline-flex gap-0.5 ml-1">
@@ -358,7 +514,17 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
                     {msg.role === "assistant" &&
                       !msg.isStreaming &&
                       msg.content.trim() && (
-                        <MessageActions message={msg} />
+                        (() => {
+                          const editBlocks = parseEditBlocks(msg.content);
+                          if (editBlocks.length > 0) {
+                            return (
+                              <div className="flex items-center gap-1 mt-1.5">
+                                <ApplyEditButton blocks={editBlocks} />
+                              </div>
+                            );
+                          }
+                          return <MessageActions message={msg} />;
+                        })()
                       )}
                   </div>
                 </div>
