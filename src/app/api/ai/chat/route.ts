@@ -2,7 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
+const START_TIMEOUT_MS = 15_000; // 15s max to start CLI
+const SESSION_TIMEOUT_MS = 15_000; // 15s max to create session
 const RESPONSE_TIMEOUT_MS = 60_000; // 60s max wait for first token
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)
+    ),
+  ]);
+}
 
 // POST /api/ai/chat
 // Body: { prompt: string, documentContent?: string, history?: Array<{role: string, content: string}> }
@@ -45,13 +56,14 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    // 5. Explicitly start the CLI subprocess
+    // 5. Explicitly start the CLI subprocess (with timeout)
     console.log("[AI] Starting Copilot CLI...");
-    await client.start();
+    await withTimeout(client.start(), START_TIMEOUT_MS, "Copilot CLI start");
     console.log("[AI] Copilot CLI started, creating session...");
 
-    // 6. Create a streaming session
-    const copilotSession = await client.createSession({
+    // 6. Create a streaming session (with timeout)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const copilotSession: any = await withTimeout(client.createSession({
       model: "gpt-4.1",
       streaming: true,
       systemMessage: {
@@ -59,7 +71,7 @@ export async function POST(req: NextRequest) {
         content: buildSystemPrompt(documentContent, history),
       },
       availableTools: [],
-    });
+    }), SESSION_TIMEOUT_MS, "Session creation");
     console.log("[AI] Session created, sending prompt...");
 
     // 7. Stream the response as SSE
