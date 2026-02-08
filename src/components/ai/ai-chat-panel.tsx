@@ -6,7 +6,7 @@ import { useAIStore, type AIMessage } from "@/stores/ai-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { useAIChat } from "@/hooks/use-ai-chat";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { slideInRight } from "@/lib/animations";
 import { cn } from "@/lib/utils";
@@ -124,12 +124,32 @@ function ApplyEditButton({ blocks }: { blocks: EditBlock[] }) {
     let appliedCount = 0;
     let failedCount = 0;
 
+    const normalizeWs = (s: string) => s.replace(/\s+/g, " ").trim();
+
     for (const block of blocks) {
       if (markdown.includes(block.search)) {
         markdown = markdown.replace(block.search, block.replace);
         appliedCount++;
       } else {
-        failedCount++;
+        // Fuzzy fallback: normalize whitespace and try sliding-window match
+        const normalizedSearch = normalizeWs(block.search);
+        const lines = markdown.split("\n");
+        const searchLines = block.search.split("\n");
+        let found = false;
+
+        for (let i = 0; i <= lines.length - searchLines.length; i++) {
+          const candidate = lines.slice(i, i + searchLines.length).join("\n");
+          if (normalizeWs(candidate) === normalizedSearch) {
+            markdown = markdown.replace(candidate, block.replace);
+            appliedCount++;
+            found = true;
+            break;
+          }
+        }
+
+        if (!found) {
+          failedCount++;
+        }
       }
     }
 
@@ -545,6 +565,7 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
             </div>
           )}
         </div>
+        <ScrollBar orientation="vertical" />
       </ScrollArea>
 
       <Separator />

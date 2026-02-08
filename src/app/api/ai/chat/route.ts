@@ -222,7 +222,12 @@ When the user asks you to make a specific change to the document (e.g., "change 
 >>>>
 \`\`\`
 
-- The SEARCH block must contain text that exists verbatim in the document.
+- CRITICAL: The SEARCH text must match the document's raw markdown EXACTLY. The document content below is in raw markdown format. Use the exact same markdown syntax in your SEARCH block, including:
+  - Link syntax: \`[text](url)\` not just "text"
+  - Emphasis: \`**bold**\` not just "bold"
+  - Code spans: \\\`code\\\` not just code
+  - Any other markdown formatting present in the original
+- Copy the text directly from the document content provided below — do not paraphrase or simplify it.
 - The REPLACE block contains what should replace it.
 - For deletions, leave the REPLACE block empty.
 - For insertions, use a SEARCH block that finds the location, and include the original text plus new content in REPLACE.
@@ -266,7 +271,7 @@ The user is in **Review mode**. You can answer questions about the document, exp
   }
 
   if (documentContent) {
-    prompt += `\n\nThe user is currently working on this document:\n\n---\n${documentContent}\n---\n\nRefer to this document when the user asks about "this document", "the text", "this section", etc.`;
+    prompt += `\n\nThe user is currently working on this document (raw markdown source — use this EXACT syntax in SEARCH blocks):\n\n---\n${documentContent}\n---\n\nRefer to this document when the user asks about "this document", "the text", "this section", etc.`;
   }
 
   if (selectedText) {
