@@ -130,24 +130,41 @@ function ApplyEditButton({ blocks }: { blocks: EditBlock[] }) {
       storage.markdown?.getMarkdown?.() ??
       useEditorStore.getState().content;
 
+    // Debug: log first 300 chars of document and each search block
+    console.log("[ApplyEdit] Document markdown (first 300):", JSON.stringify(markdown.substring(0, 300)));
+    for (const b of blocks) {
+      console.log("[ApplyEdit] SEARCH:", JSON.stringify(b.search));
+      console.log("[ApplyEdit] Exact match?", markdown.includes(b.search));
+    }
+
     let appliedCount = 0;
     let failedCount = 0;
 
+    // Normalize for comparison: collapse whitespace, trim lines
     const normalizeWs = (s: string) => s.replace(/\s+/g, " ").trim();
+    // Strip markdown link/emphasis syntax for loose matching
+    const stripMd = (s: string) =>
+      s.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+       .replace(/\*\*([^*]*)\*\*/g, "$1")
+       .replace(/`([^`]*)`/g, "$1");
 
     for (const block of blocks) {
+      // 1. Exact match
       if (markdown.includes(block.search)) {
         markdown = markdown.replace(block.search, block.replace);
         appliedCount++;
-      } else {
-        // Fuzzy fallback: normalize whitespace and try sliding-window match
-        const normalizedSearch = normalizeWs(block.search);
-        const lines = markdown.split("\n");
-        const searchLines = block.search.split("\n");
-        let found = false;
+        continue;
+      }
 
-        for (let i = 0; i <= lines.length - searchLines.length; i++) {
-          const candidate = lines.slice(i, i + searchLines.length).join("\n");
+      // 2. Whitespace-normalized sliding-window match
+      const normalizedSearch = normalizeWs(block.search);
+      const lines = markdown.split("\n");
+      const searchLines = block.search.split("\n");
+      let found = false;
+
+      for (let windowSize = searchLines.length; windowSize >= 1 && !found; windowSize--) {
+        for (let i = 0; i <= lines.length - windowSize; i++) {
+          const candidate = lines.slice(i, i + windowSize).join("\n");
           if (normalizeWs(candidate) === normalizedSearch) {
             markdown = markdown.replace(candidate, block.replace);
             appliedCount++;
@@ -155,15 +172,34 @@ function ApplyEditButton({ blocks }: { blocks: EditBlock[] }) {
             break;
           }
         }
+      }
 
-        if (!found) {
-          failedCount++;
+      // 3. Plain-text fuzzy match — strip markdown formatting and find the line
+      if (!found) {
+        const strippedSearch = normalizeWs(stripMd(block.search));
+        for (let windowSize = searchLines.length; windowSize >= 1 && !found; windowSize--) {
+          for (let i = 0; i <= lines.length - windowSize; i++) {
+            const candidate = lines.slice(i, i + windowSize).join("\n");
+            if (normalizeWs(stripMd(candidate)) === strippedSearch) {
+              markdown = markdown.replace(candidate, block.replace);
+              appliedCount++;
+              found = true;
+              break;
+            }
+          }
         }
+      }
+
+      if (!found) {
+        console.warn("[ApplyEdit] No match found. SEARCH:", JSON.stringify(block.search), "DOC:", JSON.stringify(markdown.substring(0, 500)));
+        failedCount++;
       }
     }
 
     if (appliedCount > 0) {
-      editor.commands.setContent(markdown);
+      // Use the markdown storage to properly parse and set content
+      storage.markdown?.editor?.commands?.setContent?.(markdown) ??
+        editor.commands.setContent(markdown);
       useEditorStore.getState().setContent(markdown);
       useEditorStore.getState().setDirty(true);
       setApplied(true);
