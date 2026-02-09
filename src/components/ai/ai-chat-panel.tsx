@@ -22,7 +22,6 @@ import {
   Replace,
   Copy,
   Check,
-  Wand2,
 } from "lucide-react";
 import { CopilotIcon } from "@/components/icons/copilot-icon";
 
@@ -109,135 +108,144 @@ function EditBlockDisplay({ blocks }: { blocks: EditBlock[] }) {
   );
 }
 
-function ApplyEditButton({ blocks }: { blocks: EditBlock[] }) {
-  const editor = useEditorStore((s) => s.editor);
-  const isEditable = useEditorStore((s) => s.isEditable);
-  const [applied, setApplied] = useState(false);
+// Standalone function to apply edit blocks to the editor
+function applyEditBlocks(blocks: EditBlock[]): { applied: number; failed: number } {
+  const editor = useEditorStore.getState().editor;
+  if (!editor) return { applied: 0, failed: 0 };
 
-  const handleApply = useCallback(() => {
-    if (!editor) {
-      toast.error("Editor not available");
-      return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const storage = editor.storage as any;
+  let markdown: string =
+    storage.markdown?.getMarkdown?.() ??
+    useEditorStore.getState().content;
+
+  let applied = 0;
+  let failed = 0;
+
+  const normalizeWs = (s: string) => s.replace(/\s+/g, " ").trim();
+  const stripMd = (s: string) =>
+    s.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+     .replace(/\*\*([^*]*)\*\*/g, "$1")
+     .replace(/`([^`]*)`/g, "$1");
+
+  for (const block of blocks) {
+    if (markdown.includes(block.search)) {
+      markdown = markdown.replace(block.search, block.replace);
+      applied++;
+      continue;
     }
-    if (!isEditable) {
-      toast.error("Switch to Edit mode to apply changes");
-      return;
-    }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const storage = editor.storage as any;
-    let markdown: string =
-      storage.markdown?.getMarkdown?.() ??
-      useEditorStore.getState().content;
+    const normalizedSearch = normalizeWs(block.search);
+    const lines = markdown.split("\n");
+    const searchLines = block.search.split("\n");
+    let found = false;
 
-    // Debug: log first 300 chars of document and each search block
-    console.log("[ApplyEdit] Document markdown (first 300):", JSON.stringify(markdown.substring(0, 300)));
-    for (const b of blocks) {
-      console.log("[ApplyEdit] SEARCH:", JSON.stringify(b.search));
-      console.log("[ApplyEdit] Exact match?", markdown.includes(b.search));
-    }
-
-    let appliedCount = 0;
-    let failedCount = 0;
-
-    // Normalize for comparison: collapse whitespace, trim lines
-    const normalizeWs = (s: string) => s.replace(/\s+/g, " ").trim();
-    // Strip markdown link/emphasis syntax for loose matching
-    const stripMd = (s: string) =>
-      s.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-       .replace(/\*\*([^*]*)\*\*/g, "$1")
-       .replace(/`([^`]*)`/g, "$1");
-
-    for (const block of blocks) {
-      // 1. Exact match
-      if (markdown.includes(block.search)) {
-        markdown = markdown.replace(block.search, block.replace);
-        appliedCount++;
-        continue;
+    for (let windowSize = searchLines.length; windowSize >= 1 && !found; windowSize--) {
+      for (let i = 0; i <= lines.length - windowSize; i++) {
+        const candidate = lines.slice(i, i + windowSize).join("\n");
+        if (normalizeWs(candidate) === normalizedSearch) {
+          markdown = markdown.replace(candidate, block.replace);
+          applied++;
+          found = true;
+          break;
+        }
       }
+    }
 
-      // 2. Whitespace-normalized sliding-window match
-      const normalizedSearch = normalizeWs(block.search);
-      const lines = markdown.split("\n");
-      const searchLines = block.search.split("\n");
-      let found = false;
-
+    if (!found) {
+      const strippedSearch = normalizeWs(stripMd(block.search));
       for (let windowSize = searchLines.length; windowSize >= 1 && !found; windowSize--) {
         for (let i = 0; i <= lines.length - windowSize; i++) {
           const candidate = lines.slice(i, i + windowSize).join("\n");
-          if (normalizeWs(candidate) === normalizedSearch) {
+          if (normalizeWs(stripMd(candidate)) === strippedSearch) {
             markdown = markdown.replace(candidate, block.replace);
-            appliedCount++;
+            applied++;
             found = true;
             break;
           }
         }
       }
-
-      // 3. Plain-text fuzzy match — strip markdown formatting and find the line
-      if (!found) {
-        const strippedSearch = normalizeWs(stripMd(block.search));
-        for (let windowSize = searchLines.length; windowSize >= 1 && !found; windowSize--) {
-          for (let i = 0; i <= lines.length - windowSize; i++) {
-            const candidate = lines.slice(i, i + windowSize).join("\n");
-            if (normalizeWs(stripMd(candidate)) === strippedSearch) {
-              markdown = markdown.replace(candidate, block.replace);
-              appliedCount++;
-              found = true;
-              break;
-            }
-          }
-        }
-      }
-
-      if (!found) {
-        console.warn("[ApplyEdit] No match found. SEARCH:", JSON.stringify(block.search), "DOC:", JSON.stringify(markdown.substring(0, 500)));
-        failedCount++;
-      }
     }
 
-    if (appliedCount > 0) {
-      // Use the markdown storage to properly parse and set content
-      storage.markdown?.editor?.commands?.setContent?.(markdown) ??
-        editor.commands.setContent(markdown);
-      useEditorStore.getState().setContent(markdown);
-      useEditorStore.getState().setDirty(true);
-      setApplied(true);
-      toast.success(`Applied ${appliedCount} edit${appliedCount > 1 ? "s" : ""}`);
-      setTimeout(() => setApplied(false), 3000);
-    }
+    if (!found) failed++;
+  }
 
-    if (failedCount > 0) {
-      toast.warning(
-        `${failedCount} edit${failedCount > 1 ? "s" : ""} could not be applied — text not found in document`
-      );
+  if (applied > 0) {
+    editor.commands.setContent(markdown);
+    useEditorStore.getState().setContent(markdown);
+    useEditorStore.getState().setDirty(true);
+  }
+
+  return { applied, failed };
+}
+
+function EditApplyStatus({ applied, failed }: { applied: number; failed: number }) {
+  const editor = useEditorStore((s) => s.editor);
+
+  const handleUndo = useCallback(() => {
+    if (editor) {
+      editor.commands.undo();
+      // Re-sync store content after undo
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const md = (editor.storage as any).markdown?.getMarkdown?.() as string;
+      if (md) useEditorStore.getState().setContent(md);
+      toast.success("Edit undone");
     }
-  }, [editor, isEditable, blocks]);
+  }, [editor]);
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className={cn(
-        "h-6 px-1.5 text-[10px] gap-1",
-        applied
-          ? "text-green-400"
-          : "text-purple-400 hover:text-purple-300"
+    <div className="flex items-center gap-1.5 mt-1.5 text-[10px]">
+      {applied > 0 && (
+        <>
+          <span className="text-green-400 flex items-center gap-0.5">
+            <Check className="size-3" />
+            Applied {applied} edit{applied > 1 ? "s" : ""}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 px-1 text-[10px] text-muted-foreground hover:text-foreground"
+            onClick={handleUndo}
+            title="Undo this edit"
+          >
+            Undo
+          </Button>
+        </>
       )}
-      onClick={handleApply}
-      disabled={!isEditable || applied}
-      title={
-        !isEditable
-          ? "Switch to Edit mode to apply changes"
-          : applied
-            ? "Edit applied"
-            : "Apply edit to document"
-      }
-    >
-      {applied ? <Check className="size-3" /> : <Wand2 className="size-3" />}
-      {applied ? "Applied" : "Apply Edit"}
-    </Button>
+      {failed > 0 && (
+        <span className="text-amber-400">
+          {failed} edit{failed > 1 ? "s" : ""} could not be matched
+        </span>
+      )}
+    </div>
   );
+}
+
+// Auto-applies edit blocks when rendered (i.e., when streaming completes)
+function AutoApplyEdit({ blocks, messageId }: { blocks: EditBlock[]; messageId: string }) {
+  const isEditable = useEditorStore((s) => s.isEditable);
+  const [result, setResult] = useState<{ applied: number; failed: number } | null>(null);
+
+  useEffect(() => {
+    // Only auto-apply once, and only in edit mode
+    if (result !== null) return;
+    if (!isEditable) {
+      setResult({ applied: 0, failed: blocks.length });
+      return;
+    }
+    const res = applyEditBlocks(blocks);
+    setResult(res);
+    if (res.applied > 0) {
+      toast.success(`Applied ${res.applied} edit${res.applied > 1 ? "s" : ""}`);
+    }
+    if (res.failed > 0) {
+      toast.warning(`${res.failed} edit${res.failed > 1 ? "s" : ""} could not be matched in document`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messageId]);
+
+  if (!result) return null;
+  return <EditApplyStatus applied={result.applied} failed={result.failed} />;
 }
 
 function MessageActions({ message }: { message: AIMessage }) {
@@ -582,11 +590,7 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
                         (() => {
                           const editBlocks = parseEditBlocks(msg.content);
                           if (editBlocks.length > 0) {
-                            return (
-                              <div className="flex items-center gap-1 mt-1.5">
-                                <ApplyEditButton blocks={editBlocks} />
-                              </div>
-                            );
+                            return <AutoApplyEdit blocks={editBlocks} messageId={msg.id} />;
                           }
                           return <MessageActions message={msg} />;
                         })()
