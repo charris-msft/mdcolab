@@ -31,17 +31,53 @@ export function useAIChat(documentContent?: string) {
       try {
         // 3. Build history from previous messages (exclude the ones we just added)
         const history = messages.map((m) => ({ role: m.role, content: m.content }));
+        const body = JSON.stringify({ prompt, documentContent, history, selectedText, mode: isEditable ? "edit" : "review" });
 
-        // 4. Fetch the streaming API
-        const response = await fetch("/api/ai/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, documentContent, history, selectedText, mode: isEditable ? "edit" : "review" }),
-        });
+        // 4. Fetch the streaming API (with retry for transient failures)
+        const MAX_ATTEMPTS = 3;
+        const RETRY_DELAY_MS = 1500;
+        let response: Response | null = null;
+        let lastErrorMsg = "";
+        let lastStatus: number | undefined;
+        let attempts = 0;
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({ error: "Request failed" }));
-          throw new Error(errData.error || `HTTP ${response.status}`);
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+          attempts = attempt + 1;
+          if (attempt > 0) {
+            updateMessage(assistantMsgId, `_Retrying... (attempt ${attempts} of ${MAX_ATTEMPTS})_`);
+            streamedContent = "";
+            await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+          }
+
+          try {
+            response = await fetch("/api/ai/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body,
+            });
+
+            if (!response.ok) {
+              lastStatus = response.status;
+              const errData = await response.json().catch(() => ({ error: "Request failed" }));
+              lastErrorMsg = errData.error || `HTTP ${lastStatus}`;
+              if (lastStatus === 401 || lastStatus === 403) break;
+              response = null;
+              continue;
+            }
+            break;
+          } catch (fetchErr: unknown) {
+            lastErrorMsg = fetchErr instanceof Error ? fetchErr.message : "Failed to connect to AI";
+            response = null;
+          }
+        }
+
+        if (!response || !response.ok) {
+          const isAuth = lastStatus === 401 || lastStatus === 403;
+          const statusSuffix = lastStatus && !isAuth ? ` (HTTP ${lastStatus})` : "";
+          const msg = !isAuth && attempts > 1
+            ? `Failed after ${attempts} attempts: ${lastErrorMsg}${statusSuffix}`
+            : `${lastErrorMsg}${statusSuffix}`;
+          throw new Error(msg);
         }
 
         // 5. Read the SSE stream
@@ -86,7 +122,7 @@ export function useAIChat(documentContent?: string) {
         setError(message);
         setStreaming(assistantMsgId, false);
         if (!streamedContent) {
-          updateMessage(assistantMsgId, "_Failed to get AI response_");
+          updateMessage(assistantMsgId, `_${message}_`);
         }
       } finally {
         setLoading(false);

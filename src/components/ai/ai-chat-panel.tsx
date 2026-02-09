@@ -359,6 +359,8 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const historyIndexRef = useRef(-1);
+  const draftRef = useRef("");
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -389,6 +391,8 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
       }
 
       sendMessage(content);
+      historyIndexRef.current = -1;
+      draftRef.current = "";
     },
     [input, isLoading, sendMessage]
   );
@@ -398,9 +402,36 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
+        return;
+      }
+
+      const el = e.currentTarget;
+      const userMessages = messages
+        .filter((m) => m.role === "user")
+        .map((m) => m.content);
+
+      if (e.key === "ArrowUp" && el.selectionStart === 0 && el.selectionEnd === 0) {
+        if (userMessages.length === 0) return;
+        e.preventDefault();
+        if (historyIndexRef.current === -1) {
+          draftRef.current = input;
+        }
+        const nextIndex = Math.min(historyIndexRef.current + 1, userMessages.length - 1);
+        historyIndexRef.current = nextIndex;
+        setInput(userMessages[userMessages.length - 1 - nextIndex]);
+      } else if (e.key === "ArrowDown" && el.selectionStart === el.value.length && el.selectionEnd === el.value.length) {
+        if (historyIndexRef.current < 0) return;
+        e.preventDefault();
+        const nextIndex = historyIndexRef.current - 1;
+        historyIndexRef.current = nextIndex;
+        if (nextIndex < 0) {
+          setInput(draftRef.current);
+        } else {
+          setInput(userMessages[userMessages.length - 1 - nextIndex]);
+        }
       }
     },
-    [handleSend]
+    [handleSend, messages, input]
   );
 
   // Auto-resize textarea
