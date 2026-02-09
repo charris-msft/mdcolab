@@ -514,8 +514,8 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
       </AnimatePresence>
 
       {/* Messages */}
-      <ScrollArea className="flex-1">
-        <div ref={scrollRef} className="h-full">
+      <ScrollArea className="flex-1 overflow-hidden">
+        <div ref={scrollRef}>
           {messages.length === 0 ? (
             /* Empty state */
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
@@ -554,7 +554,7 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
                 >
                   <div
                     className={cn(
-                      "max-w-[85%] rounded-lg px-3 py-2 text-sm",
+                      "max-w-[85%] rounded-lg px-3 py-2 text-sm overflow-hidden",
                       msg.role === "user"
                         ? "bg-primary text-primary-foreground"
                         : "bg-accent/50 text-foreground"
@@ -599,8 +599,8 @@ export function AIChatPanel({ documentContent }: AIChatPanelProps) {
                 </div>
               ))}
 
-              {/* Loading indicator */}
-              {isLoading && (
+              {/* Loading indicator — only show when no message is already streaming */}
+              {isLoading && !messages.some((m) => m.isStreaming) && (
                 <div className="flex justify-start">
                   <div className="bg-accent/50 rounded-lg px-3 py-2">
                     <span className="inline-flex gap-1 items-center">
