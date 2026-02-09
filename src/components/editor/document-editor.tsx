@@ -105,6 +105,15 @@ export function DocumentEditor({
           "prose-editor outline-none min-h-[500px] px-4 py-8 mx-auto max-w-[720px]",
       },
     },
+    onCreate: ({ editor }) => {
+      // Populate store with the editor's serialized markdown on first load
+      // so AI context and Apply Edit use the same source
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const markdown = (editor.storage as any).markdown?.getMarkdown?.() as string;
+      if (markdown) {
+        setContent(markdown);
+      }
+    },
     onUpdate: ({ editor }) => {
       // Skip marking dirty if editor hasn't been interacted with yet
       if (!editor.isFocused && !editorInteracted.current) { return; }
