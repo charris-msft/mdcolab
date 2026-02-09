@@ -52,10 +52,18 @@ interface EditBlock {
 
 function parseEditBlocks(content: string): EditBlock[] {
   const blocks: EditBlock[] = [];
-  const regex = /```edit\s*\n<<<< SEARCH\n([\s\S]*?)>>>>\n<<<< REPLACE\s*\n([\s\S]*?)>>>>\s*\n```/g;
+  // Match both fenced (```edit ... ```) and unfenced (raw <<<< SEARCH ... >>>>) formats
+  const fencedRegex = /```edit\s*\n<<<< SEARCH\n([\s\S]*?)>>>>\n<<<< REPLACE\s*\n([\s\S]*?)>>>>\s*\n```/g;
+  const rawRegex = /<<<< SEARCH\n([\s\S]*?)>>>>\n<<<< REPLACE\s*\n([\s\S]*?)>>>>/g;
   let match;
-  while ((match = regex.exec(content)) !== null) {
+  while ((match = fencedRegex.exec(content)) !== null) {
     blocks.push({ search: match[1].trimEnd(), replace: match[2].trimEnd() });
+  }
+  // If no fenced blocks found, try raw format
+  if (blocks.length === 0) {
+    while ((match = rawRegex.exec(content)) !== null) {
+      blocks.push({ search: match[1].trimEnd(), replace: match[2].trimEnd() });
+    }
   }
   return blocks;
 }
@@ -64,6 +72,7 @@ function parseEditBlocks(content: string): EditBlock[] {
 function stripEditBlocks(content: string): string {
   return content
     .replace(/```edit\s*\n<<<< SEARCH\n[\s\S]*?>>>>\n<<<< REPLACE\s*\n[\s\S]*?>>>>\s*\n```/g, "")
+    .replace(/<<<< SEARCH\n[\s\S]*?>>>>\n<<<< REPLACE\s*\n[\s\S]*?>>>>/g, "")
     .trim();
 }
 
