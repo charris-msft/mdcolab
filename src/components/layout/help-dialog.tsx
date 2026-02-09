@@ -24,9 +24,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { CopilotIcon } from "@/components/icons/copilot-icon";
 
 const STORAGE_KEY = "mdcolab-onboarded";
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 
 const slideVariants = {
   enter: (dir: number) => ({ x: dir > 0 ? 80 : -80, opacity: 0 }),
@@ -149,7 +150,40 @@ function SecurityStep() {
   );
 }
 
-const steps = [WelcomeStep, HowItWorksStep, QuickTipsStep, SecurityStep];
+const copilotTips = [
+  { emoji: "✨", label: "Open Copilot", desc: "Click the Copilot icon in the toolbar to open the AI panel" },
+  { emoji: "✏️", label: "Edit mode", desc: "AI edits your document directly — great for drafting & rewriting" },
+  { emoji: "💬", label: "Review mode", desc: "Ask questions about the document without making changes" },
+  { emoji: "🎯", label: "Targeted help", desc: "Select text first, then ask Copilot for focused assistance" },
+  { emoji: "⬆️", label: "Prompt history", desc: "Press Up/Down arrows to recall previous prompts" },
+];
+
+function CopilotStep() {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-2 justify-center">
+        <CopilotIcon className="h-5 w-5 text-primary" />
+        <p className="text-lg font-semibold">Copilot AI Assistant</p>
+      </div>
+      <div className="space-y-3">
+        {copilotTips.map((t, i) => (
+          <div key={i} className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-accent/40">
+            <span className="text-lg leading-none mt-0.5">{t.emoji}</span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium">{t.label}</p>
+              <p className="text-xs text-muted-foreground">{t.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground text-center">
+        Requires a <strong>GitHub Copilot</strong> subscription.
+      </p>
+    </div>
+  );
+}
+
+const steps = [WelcomeStep, HowItWorksStep, QuickTipsStep, CopilotStep, SecurityStep];
 
 // ─── Main dialog ────────────────────────────────────────────
 

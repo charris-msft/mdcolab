@@ -10,15 +10,25 @@ import {
   Moon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { CopilotIcon } from "@/components/icons/copilot-icon";
 
 interface Feature {
-  icon: LucideIcon;
+  icon: LucideIcon | typeof CopilotIcon;
   title: string;
   description: string;
   className: string;
+  highlight?: boolean;
 }
 
 const features: Feature[] = [
+  {
+    icon: CopilotIcon,
+    title: "GitHub Copilot Built-in",
+    description:
+      "AI-powered editing at your fingertips. Rewrite, improve, and expand content. Ask questions in review mode. Select text for targeted AI edits.",
+    className: "md:col-span-3",
+    highlight: true,
+  },
   {
     icon: FileEdit,
     title: "WYSIWYG Editor",
@@ -106,10 +116,10 @@ export function Features() {
         {features.map((feature) => (
           <motion.div
             key={feature.title}
-            className={`glass rounded-xl p-6 ${feature.className}`}
+            className={`glass rounded-xl p-6 ${feature.className}${feature.highlight ? " ring-1 ring-purple-500/30 bg-purple-500/5" : ""}`}
             variants={itemVariants}
           >
-            <feature.icon className="mb-4 h-8 w-8 text-primary" />
+            <feature.icon className={`mb-4 h-8 w-8 ${feature.highlight ? "text-purple-400" : "text-primary"}`} />
             <h3 className="mb-2 text-lg font-semibold tracking-tight">
               {feature.title}
             </h3>

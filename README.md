@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# mdcolab
+
+Collaborative markdown editing backed by GitHub. A modern alternative to Word for document collaboration — share markdown files via URL, leave inline comments, and get AI-powered writing assistance with GitHub Copilot.
+
+## Key Features
+
+- **Rendered markdown viewing & WYSIWYG editing** — read and edit documents with a rich-text editor
+- **GitHub-backed storage** — files stay in your repo; every save is a commit
+- **Document sharing via URL** — share any markdown file with a link
+- **Inline commenting & threaded discussions** — leave comments on specific text, just like Word
+- **GitHub Copilot AI Assistant** — AI-powered help for writing and editing documents
+
+## Copilot AI Assistant
+
+Open the Copilot panel with the ✨ sparkle button in the toolbar.
+
+**Edit mode** — AI edits the document directly. Ask it to rewrite sections, fix grammar, add content, or change details. Edits are applied automatically and can be undone with Ctrl+Z.
+
+**Review mode** — Ask questions about the document without making changes. Useful for summaries, fact-checking, or brainstorming.
+
+**Selected text as context** — Select text in the editor, then ask AI to improve, expand, or rephrase just that section.
+
+**Input history** — Press Up/Down arrow keys in the prompt input to recall previous prompts.
+
+> Requires a GitHub Copilot subscription.
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create a `.env.local` file with the following variables:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+GITHUB_ID=<your GitHub OAuth app client ID>
+GITHUB_SECRET=<your GitHub OAuth app client secret>
+NEXTAUTH_SECRET=<a random secret for NextAuth.js>
+NEXTAUTH_URL=http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open [http://localhost:3000](http://localhost:3000) to get started.
 
-## Learn More
+## Tech Stack
 
-To learn more about Next.js, take a look at the following resources:
+- [Next.js 16](https://nextjs.org) — App Router, React Server Components
+- [Tiptap](https://tiptap.dev) — rich-text / WYSIWYG editor
+- [shadcn/ui](https://ui.shadcn.com) — UI components
+- [Tailwind CSS](https://tailwindcss.com) — styling
+- [GitHub API](https://docs.github.com/en/rest) — repo & file operations
+- [GitHub Copilot SDK](https://github.com/features/copilot) — AI assistant integration
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deployment
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The app ships with a `Dockerfile` and Azure Container Apps infrastructure (`infra/` directory). Deploy with the Azure Developer CLI:
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+azd up
+```
