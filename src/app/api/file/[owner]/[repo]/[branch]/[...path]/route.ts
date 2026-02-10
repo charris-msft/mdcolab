@@ -39,9 +39,16 @@ export async function GET(
       { content, sha: data.sha, path: data.path },
       { headers }
     );
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof Error && error.message === "Not authenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    const status = (error as { status?: number })?.status;
+    if (status === 403 || status === 404) {
+      return NextResponse.json(
+        { error: "no_access", message: "You don't have access to this repository. Grant access via the GitHub App to view private repos." },
+        { status: 403 }
+      );
     }
     return NextResponse.json({ error: "Failed to fetch file" }, { status: 500 });
   }

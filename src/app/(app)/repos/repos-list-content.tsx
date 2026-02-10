@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Star, Clock, Search } from "lucide-react";
+import { Star, Clock, Search, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import type { GitHubRepo } from "@/types";
@@ -56,6 +56,15 @@ export function ReposListContent() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Repositories</h1>
+        <a
+          href="https://github.com/apps/mdcolab1-ai/installations/new"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Connect private repos
+        </a>
       </div>
 
       {/* Search */}

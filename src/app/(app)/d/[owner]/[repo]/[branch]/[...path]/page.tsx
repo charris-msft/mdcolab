@@ -25,6 +25,8 @@ import {
   Loader2,
   RefreshCw,
   Play,
+  Lock,
+  ExternalLink,
 } from "lucide-react";
 import { CopilotIcon } from "@/components/icons/copilot-icon";
 import Link from "next/link";
@@ -110,6 +112,10 @@ export default function DocumentPage() {
       const res = await fetch(
         `/api/file/${owner}/${repo}/${branch}/${filePath}`
       );
+      if (res.status === 403) {
+        const body = await res.json();
+        throw Object.assign(new Error(body.message ?? "No access"), { code: "no_access" });
+      }
       if (!res.ok) throw new Error("Failed to load file");
       return res.json() as Promise<{ content: string; sha: string; path: string }>;
     },
@@ -246,12 +252,41 @@ export default function DocumentPage() {
   }
 
   if (fileError || !fileData) {
+    const isNoAccess = fileError && (fileError as Error & { code?: string }).code === "no_access";
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <p className="text-muted-foreground">Failed to load file</p>
-        <Button asChild variant="outline">
-          <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
-        </Button>
+        {isNoAccess ? (
+          <>
+            <div className="rounded-full bg-amber-500/10 p-3">
+              <Lock className="h-8 w-8 text-amber-500" />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="font-semibold text-foreground">Private repository</p>
+              <p className="text-sm text-muted-foreground max-w-md">
+                You don&apos;t have access to <span className="font-medium">{owner}/{repo}</span> through mdcolab yet.
+                Grant access to this repo via the GitHub App to view and collaborate on private files.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button asChild>
+                <a href="https://github.com/apps/mdcolab1-ai/installations/new" target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Grant repo access
+                </a>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-muted-foreground">Failed to load file</p>
+            <Button asChild variant="outline">
+              <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
+            </Button>
+          </>
+        )}
       </div>
     );
   }

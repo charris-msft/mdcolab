@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
-import { Star, Clock, FileText, ArrowRight } from "lucide-react";
+import { Star, Clock, FileText, ArrowRight, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import type { GitHubRepo } from "@/types";
 import { getRecentDocs, type RecentDoc } from "@/lib/recent-docs";
@@ -117,12 +117,23 @@ export function DashboardContent() {
       <section>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Your Repositories</h2>
-          <Link
-            href="/repos"
-            className="flex items-center gap-1 text-sm text-primary hover:underline"
-          >
-            View all <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <div className="flex items-center gap-3">
+            <a
+              href="https://github.com/apps/mdcolab1-ai/installations/new"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Connect private repos
+            </a>
+            <Link
+              href="/repos"
+              className="flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              View all <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         </div>
 
         {isLoading && (
