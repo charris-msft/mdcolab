@@ -2,21 +2,21 @@ import { NextResponse } from "next/server";
 import { getOctokit } from "@/lib/github";
 import type { GitHubRepo } from "@/types";
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const octokit = await getOctokit();
-    const url = new URL(request.url);
-    const page = parseInt(url.searchParams.get("page") ?? "1", 10);
-    const perPage = parseInt(url.searchParams.get("per_page") ?? "30", 10);
 
-    const { data } = await octokit.repos.listForAuthenticatedUser({
-      sort: "updated",
-      direction: "desc",
-      per_page: perPage,
-      page,
-    });
+    // Paginate through ALL repos
+    const allRepos = await octokit.paginate(
+      octokit.repos.listForAuthenticatedUser,
+      {
+        sort: "updated",
+        direction: "desc",
+        per_page: 100,
+      }
+    );
 
-    const repos: GitHubRepo[] = data.map((r) => ({
+    const repos: GitHubRepo[] = allRepos.map((r) => ({
       id: r.id,
       name: r.name,
       full_name: r.full_name,

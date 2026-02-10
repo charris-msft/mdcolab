@@ -36,7 +36,7 @@ export function ReposListContent() {
   const { data: repos, isLoading, error } = useQuery<GitHubRepo[]>({
     queryKey: ["repos", "all"],
     queryFn: async () => {
-      const res = await fetch("/api/repos?per_page=100");
+      const res = await fetch("/api/repos");
       if (!res.ok) throw new Error("Failed to fetch repos");
       return res.json();
     },
