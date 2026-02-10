@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
-import { Star, Clock, FileText, ArrowRight, ExternalLink } from "lucide-react";
+import { Star, Clock, FileText, ArrowRight, ExternalLink, Lock, Globe } from "lucide-react";
 import Link from "next/link";
 import type { GitHubRepo } from "@/types";
 import { getRecentDocs, type RecentDoc } from "@/lib/recent-docs";
@@ -156,19 +156,32 @@ export function DashboardContent() {
         {repos && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {repos.slice(0, 12).map((repo) => (
-              <Link
+              <div
                 key={repo.id}
-                href={`/repos/${repo.owner.login}/${repo.name}`}
-                className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-card/80"
+                className="group relative rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-card/80"
               >
+                <a
+                  href={`https://github.com/${repo.owner.login}/${repo.name}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-foreground z-10"
+                  title="Open on GitHub"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+                <Link
+                  href={`/repos/${repo.owner.login}/${repo.name}`}
+                  className="block"
+                >
                 <div className="flex items-start justify-between">
                   <h3 className="font-semibold text-foreground group-hover:text-primary">
                     <span className="text-muted-foreground font-normal">{repo.owner.login}/</span>{repo.name}
                   </h3>
-                  {repo.private && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      Private
-                    </span>
+                  {repo.private ? (
+                    <Lock className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0 mt-1" />
+                  ) : (
+                    <Globe className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0 mt-1" />
                   )}
                 </div>
                 <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
@@ -194,7 +207,8 @@ export function DashboardContent() {
                     {formatRelativeTime(repo.updated_at)}
                   </span>
                 </div>
-              </Link>
+                </Link>
+              </div>
             ))}
           </div>
         )}
