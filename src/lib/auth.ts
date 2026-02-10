@@ -28,6 +28,11 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
+  pages: {
+    // After GitHub App installation, GitHub redirects with ?setup_action=install
+    // which causes an OAuthCallback error. Custom sign-in page handles this gracefully.
+    signIn: "/auth/signin",
+  },
   session: {
     strategy: "jwt",
   },

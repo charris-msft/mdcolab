@@ -77,10 +77,30 @@ GitHubProvider({
 - ✅ `repos.get()` returns correct `permissions.push` for installed repos
 
 **What doesn't work:**
-- ❌ **`GET /user/repos` only returns repos where the App is installed** — This is the fundamental problem. Even with a user-to-server (OAuth) token, the GitHub App can only see repos it's been explicitly granted access to.
-- ❌ **Users must install the App on each repo** they want to use with mdcolab. They must go to GitHub → Settings → Applications → mdcolab → Configure → select repos. This is a significant UX friction barrier.
-- ❌ **New users see zero repos** until they install the App, which is confusing and looks broken.
+- ❌ **Private repos are invisible without App installation** — The token has `scopes: "none"` and `installations: []`. Private repos owned by the user do NOT appear in `GET /user/repos`.
+- ❌ **Public org repos clutter the list** — `GET /user/repos` returns all public repos where the user is a member/collaborator (e.g., primer/, octodemo/, githubtraining/), even with zero installations. These repos are noise for most users.
+- ❌ **Users must install the App on their account** to see private repos. They must go to GitHub → Settings → Applications → mdcolab → Configure → select repos. This is a significant UX friction barrier.
+- ❌ **New users see org repos but not their own private repos**, which is confusing and looks broken.
 - ❌ Users may be unwilling to install an unknown GitHub App on their repos, especially private ones.
+
+**Empirical findings (Feb 10, 2026):**
+We built a debug endpoint (`/api/debug`) that revealed the actual token behavior:
+```json
+{
+  "token_scopes": "none",
+  "installations": [],
+  "repos_from_listForAuthenticatedUser": [
+    // 20 repos returned, ALL public, mostly org repos (primer/*, octodemo/*)
+    // User's own public repo (charris-msft/squad) appeared at position 15
+    // User's private repos (charris-msft/mdcolab, azure-plugin) NOT returned
+    // Repos are sorted by updated_at, so active org repos push user's own repos down
+  ]
+}
+```
+
+Key finding: **The GitHub App user-to-server token behaves like a scopeless token for repo listing — it returns all public repos the user has access to (org membership, collaborator), but NOT private repos.** This contradicts some documentation that says only installed repos are returned. The reality is:
+- Public repos: visible based on user's org membership/collaborator status (no installation needed)
+- Private repos: require App installation on the user's account
 
 **Why this is problematic:** The entire value prop of mdcolab is "share a link to a markdown file and collaborate." Requiring App installation adds friction that kills the lightweight sharing model. It's like needing to install a Word plugin before you can open a .docx link someone sent you.
 
@@ -90,16 +110,16 @@ GitHubProvider({
 
 | Capability | OAuth App (`repo` scope) | GitHub App (fine-grained) |
 |---|---|---|
-| List all user's repos | ✅ All repos | ❌ Only installed repos |
-| Read public repos | ✅ | ✅ (if installed) |
-| Read private repos | ✅ | ✅ (if installed) |
-| Write to repos | ✅ (if user has push) | ✅ (if installed + user has push) |
-| Issues API | ✅ | ✅ (if installed) |
+| List all user's repos | ✅ All repos | ⚠️ Public only (private needs installation) |
+| Read public repos | ✅ | ✅ (visible via org membership) |
+| Read private repos | ✅ | ❌ Requires App installation |
+| Write to repos | ✅ (if user has push) | ⚠️ Public: yes if user has push; Private: needs installation |
+| Issues API | ✅ | ⚠️ Public: yes; Private: needs installation |
 | Consent screen | ❌ Scary ("Full control") | ✅ Clean (Contents + Issues only) |
-| Requires per-repo setup | ✅ No | ❌ Yes (App installation) |
-| Zero-friction sharing | ✅ | ❌ |
+| Requires per-repo setup | ✅ No | ⚠️ Only for private repos |
+| Zero-friction sharing | ✅ | ⚠️ Public repos only |
 | Security posture | ⚠️ Overly broad | ✅ Minimal permissions |
-| First-time user experience | ✅ Sign in → see repos | ❌ Sign in → empty → install App → see repos |
+| First-time user experience | ✅ Sign in → see all repos | ⚠️ Sign in → see public org repos, own private repos missing |
 
 ---
 
