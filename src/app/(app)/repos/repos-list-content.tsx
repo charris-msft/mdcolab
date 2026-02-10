@@ -125,9 +125,9 @@ export function ReposListContent() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   {repo.private ? (
-                    <Lock className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                    <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
                   ) : (
-                    <Globe className="h-3 w-3 text-muted-foreground/30 shrink-0" />
+                    <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
                   )}
                   <span className="font-semibold text-foreground group-hover:text-primary">
                     {repo.owner.login}/{repo.name}

@@ -181,9 +181,9 @@ export function DashboardContent() {
                     <span className="text-muted-foreground font-normal">{repo.owner.login}/</span>{repo.name}
                   </h3>
                   {repo.private ? (
-                    <Lock className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0 mt-1" />
+                    <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-1" />
                   ) : (
-                    <Globe className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0 mt-1" />
+                    <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-1" />
                   )}
                 </div>
                 <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
