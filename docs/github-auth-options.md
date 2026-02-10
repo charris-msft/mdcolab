@@ -128,20 +128,125 @@ Key findings for EMU accounts:
 
 ---
 
+## 🏢 Enterprise Managed Users (EMU) — Critical Blocker
+
+> **This section is specifically for enterprise admin conversations.** The rest of the document covers personal GitHub accounts, which have different (less restrictive) behavior.
+
+### The Problem for EMU Users
+
+mdcolab **does not work at all** for Enterprise Managed User accounts without enterprise admin intervention. When an EMU user signs into mdcolab:
+
+- **Zero repos are returned** — not even public repos
+- **Zero installations are available** — the user can't install the app on their own account  
+- **The token is completely inert** — every API call returns empty results
+
+This is in stark contrast to personal GitHub accounts, where even without any app installation, users can see and access all public repos they're a member/collaborator of.
+
+### What We Tested
+
+| Test | Personal Account (`charris-msft`) | EMU Account (`charris_microsoft`) |
+|---|---|---|
+| `token_scopes` | `"none"` | `"none"` |
+| `installations` | `[]` | `[]` |
+| `listForAuthenticatedUser` | 20+ public repos | **0 repos** |
+| Can install app on personal account? | ✅ Yes | ❌ Account not shown |
+| Can install app on org? | N/A | ⚠️ Some orgs say "disabled" |
+| App install page shows | Personal account + orgs | Only orgs (some disabled) |
+
+### Why EMU Accounts Are Blocked
+
+1. **Enterprise policy controls app installations.** EMU accounts are managed by the enterprise; individual users cannot install third-party GitHub Apps without enterprise admin approval.
+
+2. **The app installation page doesn't show the user's personal EMU account.** Only enterprise organizations appear, and many of those show "Installations and requests are disabled for this account."
+
+3. **The GitHub App token returns zero repos.** Unlike personal accounts (which return public repos based on org membership), EMU tokens appear to be fully sandboxed — they return nothing without an explicit installation.
+
+### What the Enterprise Admin Needs to Do
+
+To enable mdcolab for EMU users, the enterprise admin needs to:
+
+#### Step 1: Allow the GitHub App in the Enterprise
+
+1. Go to **GitHub Enterprise Settings** → **Policies** → **GitHub Apps**
+2. Find or add `mdcolab1-ai` to the list of allowed third-party applications
+3. Set the policy to allow this app for the enterprise (or specific organizations)
+
+> **Note:** The app's permissions are minimal — Contents (R/W), Issues (R/W), and Metadata (R). No admin, webhook, deploy key, actions, secrets, or org-level permissions are requested.
+
+#### Step 2: Install the App on Relevant Organizations (or User Accounts)
+
+Option A — **Organization-level install:**
+1. Go to the organization's Settings → GitHub Apps → Install `mdcolab1-ai`
+2. Choose "All repositories" or select specific repos
+3. All org members can now use mdcolab for those repos
+
+Option B — **Allow user-level installations:**
+1. In enterprise policies, enable user-level app installations for `mdcolab1-ai`
+2. Individual EMU users can then install the app on their own account at: `https://github.com/apps/mdcolab1-ai/installations/new`
+3. Users choose which of their repos to grant access to (per-repo model)
+
+#### Step 3: Verify It Works
+
+After installation, the EMU user should:
+1. Sign out and sign back into mdcolab
+2. Visit the `/api/debug` endpoint to confirm repos are now returned
+3. Check that their repos appear on the Dashboard and Repos pages
+
+### Why This App Is Safe to Approve
+
+| Concern | mdcolab's Answer |
+|---|---|
+| **What permissions does it need?** | Contents (R/W) to read/render/edit markdown files. Issues (R/W) to store inline comments. Metadata (R) for repo listing. **That's it.** |
+| **What does it NOT access?** | No admin settings, no webhooks, no deploy keys, no actions/workflows, no secrets, no packages, no pages, no org management |
+| **Does it store repo data?** | No. All content is fetched on-demand from GitHub and rendered in the browser. Comments are stored as GitHub Issues in the repo itself. |
+| **Can it modify code?** | Only if the user has push access AND is in edit mode. It uses the same permission model as GitHub itself. |
+| **What's the use case?** | Collaborative markdown review — like Google Docs or Word Online, but backed by GitHub repos. Users can view rendered markdown, add inline comments, and edit documents in a WYSIWYG editor. |
+| **Who built it?** | Internal project for improving documentation collaboration workflows. |
+| **Is there an audit trail?** | Yes — all edits are GitHub commits, all comments are GitHub Issues. Full git history is preserved. |
+
+### Per-Repo Access Model (Recommended for Enterprises)
+
+Rather than granting blanket access to all repos, we recommend the **per-repo model**:
+
+1. **Install the app with "Only select repositories"** — the admin (or user, if allowed) chooses exactly which repos mdcolab can access
+2. **Users can request additional repos** — when a user navigates to a repo that hasn't been connected, mdcolab shows a "Grant access" prompt
+3. **Repos can be removed at any time** — the admin or user can revoke access to specific repos from the GitHub App installation settings
+
+This respects the principle of least privilege and gives the enterprise full control over which repos are exposed to the application.
+
+### Enterprise Admin FAQ
+
+**Q: Can we restrict mdcolab to specific teams or users?**
+A: Yes. Install the app on specific organizations or repos. Only users with existing GitHub access to those repos will be able to use mdcolab with them.
+
+**Q: What happens if we uninstall the app?**
+A: mdcolab immediately loses access. Comments stored as GitHub Issues remain in the repo (they're standard GitHub Issues). No data is retained by the app.
+
+**Q: Does the app need webhook access?**
+A: No. Webhooks are disabled. The app operates on-demand — it fetches content when users request it.
+
+**Q: Can the app act on behalf of users without their knowledge?**
+A: No. The app uses user-to-server tokens (OAuth flow). Every action is authenticated as the signed-in user and requires their active session.
+
+**Q: Is the app hosted internally or externally?**
+A: Currently hosted on Azure Container Apps. Can be deployed to any internal infrastructure if required by security policy.
+
+---
+
 ## Comparison Matrix
 
-| Capability | OAuth App (`repo` scope) | GitHub App (fine-grained) |
-|---|---|---|
-| List all user's repos | ✅ All repos | ⚠️ Public only (private needs installation) |
-| Read public repos | ✅ | ✅ (visible via org membership) |
-| Read private repos | ✅ | ❌ Requires App installation |
-| Write to repos | ✅ (if user has push) | ⚠️ Public: yes if user has push; Private: needs installation |
-| Issues API | ✅ | ⚠️ Public: yes; Private: needs installation |
-| Consent screen | ❌ Scary ("Full control") | ✅ Clean (Contents + Issues only) |
-| Requires per-repo setup | ✅ No | ⚠️ Only for private repos |
-| Zero-friction sharing | ✅ | ⚠️ Public repos only |
-| Security posture | ⚠️ Overly broad | ✅ Minimal permissions |
-| First-time user experience | ✅ Sign in → see all repos | ⚠️ Sign in → see public org repos, own private repos missing |
+| Capability | OAuth App (`repo` scope) | GitHub App (fine-grained) | GitHub App on EMU |
+|---|---|---|---|
+| List all user's repos | ✅ All repos | ⚠️ Public only (private needs installation) | ❌ Nothing without admin approval |
+| Read public repos | ✅ | ✅ (visible via org membership) | ❌ Blocked |
+| Read private repos | ✅ | ❌ Requires App installation | ❌ Blocked |
+| Write to repos | ✅ (if user has push) | ⚠️ Public: yes if user has push; Private: needs installation | ❌ Blocked |
+| Issues API | ✅ | ⚠️ Public: yes; Private: needs installation | ❌ Blocked |
+| Consent screen | ❌ Scary ("Full control") | ✅ Clean (Contents + Issues only) | N/A — can't get there |
+| Requires per-repo setup | ✅ No | ⚠️ Only for private repos | ❌ Requires enterprise admin |
+| Zero-friction sharing | ✅ | ⚠️ Public repos only | ❌ No |
+| Security posture | ⚠️ Overly broad | ✅ Minimal permissions | ✅ Minimal permissions (if enabled) |
+| First-time user experience | ✅ Sign in → see all repos | ⚠️ Sign in → see public org repos, own private repos missing | ❌ Sign in → see nothing |
 
 ---
 
