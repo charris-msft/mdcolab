@@ -7,11 +7,8 @@ export const authOptions: NextAuthOptions = {
     GitHubProvider({
       clientId: process.env.GITHUB_CLIENT_ID!,
       clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          scope: "repo read:user user:email",
-        },
-      },
+      // GitHub App permissions are configured on the App itself (Contents R/W, Issues R/W),
+      // not via OAuth scopes. No scope param needed.
     }),
   ],
   callbacks: {

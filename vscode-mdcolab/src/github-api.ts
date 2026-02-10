@@ -34,7 +34,9 @@ export interface CommentReply {
 }
 
 async function getOctokit(): Promise<Octokit> {
-  const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+  const usePrivate = vscode.workspace.getConfiguration('mdcolab').get<boolean>('privateRepoAccess', false);
+  const scopes = usePrivate ? ['repo'] : ['public_repo'];
+  const session = await vscode.authentication.getSession('github', scopes, { createIfNone: true });
   if (!session) {
     throw new Error('GitHub authentication required');
   }

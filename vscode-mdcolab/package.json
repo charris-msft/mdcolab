@@ -141,6 +141,11 @@
           "type": "number",
           "default": 30,
           "description": "Auto-refresh interval for comments in seconds (0 to disable)"
+        },
+        "mdcolab.privateRepoAccess": {
+          "type": "boolean",
+          "default": false,
+          "description": "Request full repo scope for private repository access. When disabled, only public repositories are accessible (recommended for minimal permissions)."
         }
       }
     }

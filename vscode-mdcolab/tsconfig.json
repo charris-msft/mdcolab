@@ -14,5 +14,5 @@
     "resolveJsonModule": true,
     "declaration": true
   },
-  "exclude": ["node_modules", ".vscode-test", "out"]
+  "exclude": ["node_modules", ".vscode-test", "out", "webview-ui"]
 }
