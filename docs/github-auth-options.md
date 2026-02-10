@@ -104,6 +104,28 @@ Key finding: **The GitHub App user-to-server token behaves like a scopeless toke
 
 **Why this is problematic:** The entire value prop of mdcolab is "share a link to a markdown file and collaborate." Requiring App installation adds friction that kills the lightweight sharing model. It's like needing to install a Word plugin before you can open a .docx link someone sent you.
 
+**Empirical findings — Enterprise Managed User (EMU) accounts (Feb 10, 2026):**
+
+We tested with an EMU account (`charris_microsoft`, managed by Microsoft EMU). The debug endpoint returned:
+```json
+{
+  "user": "charris_microsoft",
+  "token_scopes": "none",
+  "installations": [],
+  "repos_from_listForAuthenticatedUser": []
+}
+```
+
+**Zero repos returned** — even public repos the user has access to. This is dramatically different from the personal account (`charris-msft`) which returned 20+ public repos with zero installations.
+
+Key findings for EMU accounts:
+- The "free public repo access" behavior seen on personal accounts does **not** work for EMU accounts
+- The GitHub App install page doesn't show the EMU user's personal account — only enterprise organizations appear
+- Enterprise orgs may have "Installations and requests are disabled" policies (e.g., `ms-copilot` in the Microsoft EMU)
+- **The GitHub App token is completely inert on EMU accounts without enterprise admin approval**
+
+**Critical implication for enterprise adoption:** The exact audience most likely to pay for mdcolab — enterprise teams using GitHub EMU for internal documentation — is the audience that **cannot use it** without enterprise admin intervention. This creates a chicken-and-egg problem: the app can't demonstrate value until it's approved, and it won't be approved until it demonstrates value.
+
 ---
 
 ## Comparison Matrix
