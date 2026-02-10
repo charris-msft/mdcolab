@@ -34,11 +34,13 @@ const languageColors: Record<string, string> = {
 
 export function DashboardContent() {
   const { data: session } = useSession();
+  const sessionAny = session as unknown as Record<string, unknown> | null;
+  const login = (sessionAny?.login as string) ?? session?.user?.name;
   const [recentDocs, setRecentDocs] = useState<RecentDoc[]>([]);
 
   useEffect(() => {
-    setRecentDocs(getRecentDocs());
-  }, []);
+    if (login) setRecentDocs(getRecentDocs(login));
+  }, [login]);
 
   const { data: repos, isLoading, error } = useQuery<GitHubRepo[]>({
     queryKey: ["repos"],

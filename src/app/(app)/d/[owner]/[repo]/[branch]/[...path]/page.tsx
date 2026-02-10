@@ -146,9 +146,9 @@ export default function DocumentPage() {
         branch,
         path: filePath,
         fileName,
-      });
+      }, author.login);
     }
-  }, [fileData, filePath, setFileSha, setFilePath, setDirty, owner, repo, branch, fileName]);
+  }, [fileData, filePath, setFileSha, setFilePath, setDirty, owner, repo, branch, fileName, author.login]);
 
   // Save mutation
   const saveMutation = useMutation({
