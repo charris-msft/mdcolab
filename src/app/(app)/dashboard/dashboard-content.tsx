@@ -43,7 +43,7 @@ export function DashboardContent() {
   const { data: repos, isLoading, error } = useQuery<GitHubRepo[]>({
     queryKey: ["repos"],
     queryFn: async () => {
-      const res = await fetch("/api/repos?per_page=12");
+      const res = await fetch("/api/repos");
       if (!res.ok) throw new Error("Failed to fetch repos");
       return res.json();
     },
@@ -144,7 +144,7 @@ export function DashboardContent() {
 
         {repos && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {repos.map((repo) => (
+            {repos.slice(0, 12).map((repo) => (
               <Link
                 key={repo.id}
                 href={`/repos/${repo.owner.login}/${repo.name}`}

@@ -42,11 +42,15 @@ export function ReposListContent() {
     },
   });
 
-  const filtered = repos?.filter(
-    (r) =>
-      r.name.toLowerCase().includes(search.toLowerCase()) ||
-      r.description?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = repos?.filter((r) => {
+    const q = search.toLowerCase();
+    return (
+      r.full_name.toLowerCase().includes(q) ||
+      r.name.toLowerCase().includes(q) ||
+      r.owner.login.toLowerCase().includes(q) ||
+      r.description?.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="space-y-6">

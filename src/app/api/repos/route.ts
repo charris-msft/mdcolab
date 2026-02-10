@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { getOctokit } from "@/lib/github";
+import { getOctokit, getSession } from "@/lib/github";
 import type { GitHubRepo } from "@/types";
 
 export async function GET() {
   try {
     const octokit = await getOctokit();
+    const session = await getSession();
+    const login = (session as any)?.login as string;
 
     // Paginate through ALL repos
     const allRepos = await octokit.paginate(
@@ -31,6 +33,14 @@ export async function GET() {
       language: r.language ?? null,
       stargazers_count: r.stargazers_count,
     }));
+
+    // Sort user-owned repos first, then by updated_at desc
+    repos.sort((a, b) => {
+      const aOwned = a.owner.login.toLowerCase() === login?.toLowerCase() ? 0 : 1;
+      const bOwned = b.owner.login.toLowerCase() === login?.toLowerCase() ? 0 : 1;
+      if (aOwned !== bOwned) return aOwned - bOwned;
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    });
 
     return NextResponse.json(repos);
   } catch (error) {
