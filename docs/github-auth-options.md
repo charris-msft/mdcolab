@@ -151,6 +151,39 @@ This is the fundamental tension:
 
 ---
 
+## UX Gap: No Standardized Capability Disclosure
+
+**Source:** Security team feedback (Feb 10, 2026)
+
+When a user is asked to install a GitHub App, the installation page shows the App's description (developer-written, unverified) and the requested permissions (e.g., "Contents: Read & Write"). But there is **no standardized UX that explains what the app will actually do** with those permissions.
+
+**The problem:** A user seeing "Contents: Read & Write" doesn't know whether the app will:
+- Just read their markdown files for rendering (our use case), or
+- Silently rewrite all their code, or
+- Exfiltrate their proprietary source code to a third party
+
+The permission labels describe *capability*, not *intent*. There's no equivalent of an app store's "privacy nutrition label" or a mobile app's "this app uses your camera to scan QR codes" disclosure.
+
+**What's missing from the GitHub App installation experience:**
+
+| What exists | What's missing |
+|---|---|
+| App name and description (developer-written) | Standardized "what this app does" disclosure |
+| Permission labels ("Contents: Read & Write") | Plain-English explanation of how permissions are used |
+| Developer/org identity | Trust signals (verified publisher, security audit, user reviews) |
+| "Install" button | Informed consent — user can't assess risk vs. benefit |
+
+**Why this matters for adoption:** Security-conscious users (exactly the people whose organizations need tools like mdcolab) will refuse to install an unknown GitHub App when they can't make an informed decision about what it will do with their data. The current UX puts the burden entirely on the user to trust the developer's description.
+
+**Recommendation for GitHub team:** Consider a standardized capability disclosure framework for GitHub Apps, similar to:
+- **iOS App Privacy labels** — structured, mandatory disclosure of data usage
+- **Chrome Web Store permissions justification** — developers must explain why each permission is needed
+- **OAuth consent screen details** — Google requires apps to justify each scope requested
+
+This would benefit the entire GitHub App ecosystem, not just mdcolab.
+
+---
+
 ## Possible Solutions (for discussion with GitHub team)
 
 ### Option A: Hybrid approach — GitHub App + OAuth scope for repo listing
