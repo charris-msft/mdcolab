@@ -7,6 +7,7 @@ import { useEditorStore } from "@/stores/editor-store";
 import { useCommentStore } from "@/stores/comment-store";
 import { useAIStore } from "@/stores/ai-store";
 import { DocumentEditor } from "@/components/editor";
+import { PresentationView } from "@/components/presentation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -23,6 +24,7 @@ import {
   Check,
   Loader2,
   RefreshCw,
+  Play,
 } from "lucide-react";
 import { CopilotIcon } from "@/components/icons/copilot-icon";
 import Link from "next/link";
@@ -59,6 +61,7 @@ export default function DocumentPage() {
   const fileName = params.path[params.path.length - 1];
 
   const [editMode, setEditMode] = useState(false);
+  const [presentationMode, setPresentationMode] = useState(false);
   const { data: session } = useSession();
   const sessionAny = session as unknown as Record<string, unknown> | null;
   const author = {
@@ -222,8 +225,13 @@ export default function DocumentPage() {
         ...SHORTCUTS.AI_PANEL,
         handler: () => toggleAIPanel(),
       },
+      {
+        key: 'F5',
+        handler: () => setPresentationMode(true),
+        description: 'Present as slideshow',
+      },
     ],
-    [handleSave, setSidebarOpen, isSidebarOpen, nextComment, prevComment, toggleAIPanel]
+    [handleSave, setSidebarOpen, isSidebarOpen, nextComment, prevComment, toggleAIPanel, setPresentationMode]
   );
   useKeyboardShortcuts(shortcuts);
 
@@ -325,6 +333,22 @@ export default function DocumentPage() {
               </Tooltip>
             </div>
           )}
+
+          {/* Present */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setPresentationMode(true)}
+              >
+                <Play className="h-4 w-4" />
+                Present
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Present as slideshow</TooltipContent>
+          </Tooltip>
 
           <Separator orientation="vertical" className="h-6" />
 
@@ -505,6 +529,15 @@ export default function DocumentPage() {
         )}
       </div>
     </div>
+
+    {/* Presentation Mode */}
+    {presentationMode && (
+      <PresentationView
+        markdown={editorContent || fileData.content}
+        onExit={() => setPresentationMode(false)}
+        theme="dark"
+      />
+    )}
     </TooltipProvider>
   );
 }

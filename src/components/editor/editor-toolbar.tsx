@@ -27,6 +27,8 @@ import {
   BetweenHorizontalEnd,
   BetweenVerticalStart,
   BetweenVerticalEnd,
+  Presentation,
+  StickyNote,
 } from "lucide-react";
 
 interface EditorToolbarProps {
@@ -224,6 +226,39 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         title="Insert table"
       >
         <TableIcon className="h-4 w-4" />
+      </Button>
+
+      <Separator orientation="vertical" className="mx-1 h-6" />
+
+      {/* Presentation */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 min-h-[32px] min-w-[32px]"
+        onClick={() => editor.chain().focus().setHorizontalRule().run()}
+        aria-label="Insert slide break"
+        title="Slide break (---)"
+      >
+        <Presentation className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 min-h-[32px] min-w-[32px]"
+        onClick={() =>
+          editor
+            .chain()
+            .focus()
+            .insertContent([
+              { type: 'paragraph', content: [{ type: 'text', text: 'Note:' }] },
+              { type: 'paragraph', content: [{ type: 'text', text: 'Your speaker notes here' }] },
+            ])
+            .run()
+        }
+        aria-label="Insert speaker notes"
+        title="Speaker notes"
+      >
+        <StickyNote className="h-4 w-4" />
       </Button>
 
       {/* Table controls — shown when cursor is inside a table */}

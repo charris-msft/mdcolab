@@ -452,7 +452,8 @@ function App() {
     onUpdate: ({ editor: ed }) => {
       if (isExternalUpdateRef.current) return;
       setIsDirty(true);
-      const md = (ed.storage as Record<string, { getMarkdown: () => string }>).markdown.getMarkdown();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const md = (ed.storage as any).markdown.getMarkdown() as string;
       contentRef.current = md;
       vscode.postMessage({ type: "contentChanged", markdown: md });
     },

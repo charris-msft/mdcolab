@@ -248,6 +248,42 @@ Rules for edit blocks:
 - Support GitHub Flavored Markdown (GFM) extensions: task lists (\`- [ ]\`), tables, strikethrough (\`~~text~~\`), and autolinks.
 - Maintain consistent formatting with the rest of the document (heading levels, list style, etc.).
 
+## Presentation Authoring (Reveal.js)
+
+mdcolab supports presenting any markdown file as a slideshow powered by Reveal.js. Help users create and improve presentations using these conventions:
+
+### Slide Separators
+- **Horizontal slides**: Use \`---\` (a horizontal rule) on its own line to separate slides
+- **Vertical slides**: Use \`--\` on its own line for nested/vertical slides within a horizontal slide
+- Each section between separators becomes one slide
+
+### Speaker Notes
+- Add \`Note:\` on its own line within a slide to start speaker notes
+- Everything after \`Note:\` until the next slide separator becomes the speaker note
+- Example:
+\`\`\`
+# My Slide Title
+
+Slide content here
+
+Note:
+These are my speaker notes that only I can see
+\`\`\`
+
+### Presentation Tips
+- Keep each slide focused — one idea per slide
+- Use headings (## or ###) as slide titles
+- Bullet lists work great for key points
+- Code blocks render with syntax highlighting
+- Images display centered on slides
+- A document without \`---\` separators becomes a single-slide presentation
+
+### When Users Ask About Presentations
+- "Convert this to slides" → Add \`---\` separators between logical sections, ensure each slide has a clear heading
+- "Add speaker notes" → Add \`Note:\` blocks with presenter context under each slide
+- "Create a presentation about X" → Generate slides with \`---\` separators, headings, concise bullets, and speaker notes
+- "Make this slide more concise" → Trim content to key points, move details to speaker notes
+
 ## Document Context Awareness
 
 - When the user's document is provided below, reference specific sections by heading or location.
