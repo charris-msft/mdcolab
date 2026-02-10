@@ -183,7 +183,50 @@ Use the GitHub public API (no auth needed) for reading public repos, and only re
 
 **Limitation:** Doesn't solve the private repo listing problem. Also, reading via public API has rate limits (60 req/hour unauthenticated vs 5000 authenticated).
 
-### Option E: Fine-grained OAuth scopes for OAuth Apps
+### Option E: Per-Repo Collaborator Model for Private Repos
+
+**Source:** Security team feedback (Feb 10, 2026)
+
+**Insight:** Instead of asking for blanket access to all private repos (OAuth `repo` scope) or requiring account-wide App installation, let users explicitly grant access to individual private repos — similar to how private repo collaboration already works on GitHub.
+
+**How it would work:**
+
+1. **Public repos:** No installation needed — the GitHub App user-to-server token already provides access to public repos where the user is a member/collaborator (empirically verified).
+2. **Private repos:** The user adds the mdcolab GitHub App to **only the specific repos** they want to share. This is done via the App's installation page, where GitHub already provides a "Only select repositories" option.
+3. **UX flow:** When a user tries to open a private repo in mdcolab and we can't access it, we show a prompt: "This is a private repo. To use mdcolab with it, [grant access to this repo] →" with a link to the App installation settings.
+
+**Why this is compelling:**
+
+| Aspect | Account-wide access | Per-repo collaborator model |
+|---|---|---|
+| User comfort | 😬 "Access all my repos" | 😊 "Access only repos I choose" |
+| Security | Over-privileged | Least-privilege |
+| Boss can see your side project? | Yes | No — only repos you explicitly share |
+| Adoption friction | High (scary consent) | Low (familiar collaborator pattern) |
+| Works today? | Yes | ✅ Yes — no platform changes needed |
+
+**Advantages:**
+- ✅ **Already works** with the current GitHub App model — users can select specific repos during installation
+- ✅ **Least-privilege by design** — the app only sees repos the user explicitly granted
+- ✅ **Familiar pattern** — same mental model as adding a collaborator to a private repo
+- ✅ **No scary permissions** — consent is per-repo, not account-wide
+- ✅ **Incremental adoption** — start with public repos (zero friction), add private repos one at a time as needed
+
+**Limitations:**
+- ⚠️ Users must visit GitHub's App installation settings to add repos (not in-app yet)
+- ⚠️ Can't list repos the user hasn't granted access to (but we can prompt when they navigate via direct URL)
+- ⚠️ Requires the user to understand they need to "install" the app on repos — could be improved with a better in-app onboarding flow
+
+**Implementation plan:**
+1. For repo listing: Show installed (accessible) repos, plus offer a "Connect more repos" link to the GitHub App settings
+2. For direct URL access (`/d/{owner}/{repo}/...`): If we get a 404/403, show a friendly "Grant access" prompt
+3. Future: Use the GitHub API to show the user which of their repos have the app installed vs. not, with one-click install buttons
+
+**This is our recommended near-term approach.** It works today, requires no GitHub platform changes, and respects the principle of least privilege. Combined with the zero-friction public repo access we already have, this covers the vast majority of use cases.
+
+---
+
+### Option F: Fine-grained OAuth scopes for OAuth Apps
 
 Bring the fine-grained permission model from GitHub Apps to OAuth Apps. Instead of the blunt `repo` scope, allow OAuth Apps to request:
 - `repo:contents:read`
@@ -203,13 +246,20 @@ This would give us the best of both worlds: broad repo access (OAuth flow, no in
 1. The scary `repo` scope (which grants far more than needed), OR
 2. Per-repo App installation (which kills the lightweight sharing UX)
 
-**Option E (fine-grained OAuth scopes)** would be the most impactful solution. It would:
+**Option E (per-repo collaborator model)** is our **recommended near-term approach**. It:
+- Works today with zero GitHub platform changes
+- Respects least-privilege: app only sees repos the user explicitly grants
+- Eliminates the "access all my private repos" fear factor
+- Combines with the existing zero-friction public repo access
+- Mirrors the familiar "add a collaborator" mental model
+
+**Option F (fine-grained OAuth scopes)** would be the most impactful long-term platform improvement. It would:
 - Keep the simple OAuth flow (sign in → see all repos)
 - Show users exactly what permissions they're granting (contents + issues only)
 - Not require per-repo App installation
 - Apply to the entire ecosystem of GitHub-integrated apps, not just ours
 
-**Option C (streamlined account-level installation)** is a good near-term improvement. If the GitHub App OAuth flow could include an "install on all repos" prompt during first sign-in, the UX would be almost as smooth as the OAuth App flow.
+**Option C (streamlined account-level installation)** is a good mid-term improvement. If the GitHub App OAuth flow could include an "install on all repos" prompt during first sign-in, the UX would be almost as smooth as the OAuth App flow.
 
 ---
 
