@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { getOctokit } from "@/lib/github";
+import { auth } from "@/lib/auth";
+import { isAppConfigured, getInstallationOctokit } from "@/lib/github-app";
+import { checkSharingAccess } from "@/lib/sharing-utils";
 import type { CommentThread, CommentAnchor, Comment } from "@/types";
 
 const LABEL = "mdcolab";
@@ -242,6 +245,58 @@ export async function GET(
     if (error instanceof Error && error.message === "Not authenticated") {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+    const errStatus = (error as { status?: number })?.status;
+    if ((errStatus === 403 || errStatus === 404) && isAppConfigured()) {
+      try {
+        const session = await auth();
+        const login = (session as any)?.login;
+        if (login) {
+          const { owner, repo, path: pathSegments } = await params;
+          const filePath = pathSegments.join("/");
+          const installationOctokit = await getInstallationOctokit(owner, repo);
+          const { authorized } = await checkSharingAccess(installationOctokit, owner, repo, filePath, login);
+          if (authorized) {
+            let issues: GitHubIssue[] = [];
+            const pathLabel = `path:${filePath}`;
+            try {
+              issues = await fetchIssuesWithLabels(installationOctokit, owner, repo, `${LABEL},${pathLabel}`);
+            } catch { /* ignore */ }
+            if (issues.length === 0) {
+              try {
+                const allIssues = await fetchIssuesWithLabels(installationOctokit, owner, repo, LABEL);
+                issues = allIssues.filter((issue) => {
+                  const meta = parseMetadata(issue.body ?? "");
+                  return meta?.file === filePath;
+                });
+              } catch { /* ignore */ }
+            }
+            const seen = new Set<number>();
+            issues = issues.filter((issue) => {
+              if (seen.has(issue.number)) return false;
+              seen.add(issue.number);
+              return true;
+            });
+            const threads: CommentThread[] = [];
+            await Promise.all(
+              issues.map(async (issue) => {
+                const { data: comments } = await installationOctokit.issues.listComments({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  per_page: 100,
+                });
+                const thread = issueToThread(issue, comments as unknown as GitHubComment[]);
+                if (thread) threads.push(thread);
+              })
+            );
+            threads.sort((a, b) => a.comments[0]?.createdAt.localeCompare(b.comments[0]?.createdAt ?? "") ?? 0);
+            return NextResponse.json({ threads });
+          }
+        }
+      } catch {
+        // Fall through to error
+      }
+    }
     console.error("GET comments error:", error);
     return NextResponse.json({ error: "Failed to fetch comments" }, { status: 500 });
   }
@@ -255,11 +310,11 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ owner: string; repo: string; branch: string; path: string[] }> }
 ) {
+  const body = await request.json();
   try {
     const { owner, repo, path: pathSegments } = await params;
     const filePath = pathSegments.join("/");
     const octokit = await getOctokit();
-    const body = await request.json();
 
     const action: string = body.action; // "create" | "reply" | "resolve" | "reopen"
 
@@ -354,6 +409,79 @@ export async function POST(
       return NextResponse.json({
         error: "Issues are disabled for this repository. Enable them in Settings → Features → Issues.",
       }, { status: 410 });
+    }
+    const errStatus = (error as { status?: number })?.status;
+    if ((errStatus === 403 || errStatus === 404) && isAppConfigured()) {
+      try {
+        const session = await auth();
+        const login = (session as any)?.login;
+        if (login) {
+          const { owner, repo, path: pathSegments } = await params;
+          const filePath = pathSegments.join("/");
+          const installationOctokit = await getInstallationOctokit(owner, repo);
+          const { authorized } = await checkSharingAccess(installationOctokit, owner, repo, filePath, login);
+          if (authorized) {
+            const action: string = body.action;
+
+            if (action === "create") {
+              const anchor: CommentAnchor = body.anchor;
+              const commentBody: string = body.body;
+              const labels: string[] = [];
+              const fileLabel = `file:${filePath.split("/").pop() ?? filePath}`;
+              const pathLabel = `path:${filePath}`;
+              if (await ensureLabelSafe(installationOctokit, owner, repo, LABEL, LABEL_COLOR, "mdcolab comment threads")) labels.push(LABEL);
+              if (await ensureLabelSafe(installationOctokit, owner, repo, fileLabel, "0E8A16", `mdcolab comments for ${filePath}`)) labels.push(fileLabel);
+              if (await ensureLabelSafe(installationOctokit, owner, repo, pathLabel, "0E8A16", `mdcolab path ${filePath}`)) labels.push(pathLabel);
+              const selectedText = anchor.selectedText || "General comment";
+              const truncated = selectedText.length > 50 ? selectedText.slice(0, 50) + "…" : selectedText;
+              const title = `[mdcolab] "${truncated}" — ${filePath}`;
+              const { data: issue } = await installationOctokit.issues.create({
+                owner,
+                repo,
+                title,
+                body: buildIssueBody(anchor, commentBody, filePath),
+                labels: labels.length > 0 ? labels : undefined,
+              });
+              const thread: CommentThread = {
+                id: String(issue.number),
+                status: "open",
+                anchor,
+                comments: [
+                  toComment({ id: issue.id, body: commentBody, user: issue.user as GitHubUser | null, created_at: issue.created_at, updated_at: issue.updated_at }),
+                ],
+              };
+              return NextResponse.json({ thread });
+            }
+
+            if (action === "reply") {
+              const issueNumber: number = body.issueNumber;
+              const commentBody: string = body.body;
+              const { data: comment } = await installationOctokit.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: commentBody,
+              });
+              return NextResponse.json({
+                comment: toComment({ id: comment.id, body: comment.body ?? "", user: comment.user as GitHubUser | null, created_at: comment.created_at, updated_at: comment.updated_at }),
+              });
+            }
+
+            if (action === "resolve" || action === "reopen") {
+              const issueNumber: number = body.issueNumber;
+              await installationOctokit.issues.update({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                state: action === "resolve" ? "closed" : "open",
+              });
+              return NextResponse.json({ ok: true });
+            }
+          }
+        }
+      } catch {
+        // Fall through to error
+      }
     }
     console.error("POST comments error:", error);
     return NextResponse.json({ error: "Failed to save comment" }, { status: 500 });

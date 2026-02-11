@@ -32,6 +32,7 @@ import { CopilotIcon } from "@/components/icons/copilot-icon";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommentSidebar } from "@/components/comments/comment-sidebar";
+import { ShareDialog } from "@/components/sharing/share-dialog";
 import { AIChatPanel } from "@/components/ai/ai-chat-panel";
 import {
   Sheet,
@@ -48,6 +49,7 @@ import { useComments } from "@/hooks/use-comments";
 import { useKeyboardShortcuts, SHORTCUTS } from "@/hooks/use-keyboard-shortcuts";
 import { useCommentNavigation } from "@/hooks/use-comment-navigation";
 import { addRecentDoc } from "@/lib/recent-docs";
+import type { SharingConfig } from "@/lib/sharing-types";
 
 export default function DocumentPage() {
   const params = useParams<{
@@ -64,6 +66,7 @@ export default function DocumentPage() {
 
   const [editMode, setEditMode] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const { data: session } = useSession();
   const sessionAny = session as unknown as Record<string, unknown> | null;
   const author = {
@@ -196,11 +199,6 @@ export default function DocumentPage() {
     [canEdit, fileSha, saveMutation]
   );
 
-  const handleShare = useCallback(() => {
-    navigator.clipboard.writeText(window.location.href);
-    toast.success("Link copied!");
-  }, []);
-
   // Keyboard shortcuts
   const shortcuts = useMemo(
     () => [
@@ -243,6 +241,15 @@ export default function DocumentPage() {
 
   const openThreadCount = threads.filter((t) => t.status === "open").length;
 
+  const isNoAccess = !!(fileError && (fileError as Error & { code?: string }).code === "no_access");
+
+  // When access is denied, check if sharing config exists for this document
+  const sharingQuery = useQuery({
+    queryKey: ["sharing", owner, repo],
+    queryFn: () => fetch(`/api/sharing/${owner}/${repo}`).then((r) => r.json()) as Promise<{ sharing: SharingConfig | null }>,
+    enabled: isNoAccess,
+  });
+
   if (fileLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -252,7 +259,7 @@ export default function DocumentPage() {
   }
 
   if (fileError || !fileData) {
-    const isNoAccess = fileError && (fileError as Error & { code?: string }).code === "no_access";
+    const sharingDoc = sharingQuery.data?.sharing?.documents?.[filePath];
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         {isNoAccess ? (
@@ -260,24 +267,40 @@ export default function DocumentPage() {
             <div className="rounded-full bg-amber-500/10 p-3">
               <Lock className="h-8 w-8 text-amber-500" />
             </div>
-            <div className="text-center space-y-1">
-              <p className="font-semibold text-foreground">Private repository</p>
-              <p className="text-sm text-muted-foreground max-w-md">
-                You don&apos;t have access to <span className="font-medium">{owner}/{repo}</span> through mdcolab yet.
-                Grant access to this repo via the GitHub App to view and collaborate on private files.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <Button asChild>
-                <a href="https://github.com/apps/mdcolab1-ai/installations/new" target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Grant repo access
-                </a>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
-              </Button>
-            </div>
+            {sharingDoc ? (
+              <>
+                <div className="text-center space-y-1">
+                  <p className="font-semibold text-foreground">You don&apos;t have access to this document</p>
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    Ask <span className="font-medium">@{sharingDoc.sharedBy}</span> to share it with you.
+                  </p>
+                </div>
+                <Button asChild variant="outline">
+                  <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="text-center space-y-1">
+                  <p className="font-semibold text-foreground">Private repository</p>
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    You don&apos;t have access to <span className="font-medium">{owner}/{repo}</span> through mdcolab yet.
+                    Grant access to this repo via the GitHub App to view and collaborate on private files.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <Button asChild>
+                    <a href="https://github.com/apps/mdcolab1-ai/installations/new" target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Grant repo access
+                    </a>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
+                  </Button>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -394,7 +417,7 @@ export default function DocumentPage() {
                 variant="ghost"
                 size="sm"
                 className="gap-1.5"
-                onClick={handleShare}
+                onClick={() => setShareDialogOpen(true)}
                 disabled={!hasIssues}
               >
                 <Share2 className="h-4 w-4" />
@@ -573,6 +596,16 @@ export default function DocumentPage() {
         theme="dark"
       />
     )}
+    <ShareDialog
+      open={shareDialogOpen}
+      onOpenChange={setShareDialogOpen}
+      owner={owner}
+      repo={repo}
+      branch={branch}
+      filePath={filePath}
+      canEdit={canEdit}
+      isEmu={(sessionAny?.isEmu as boolean) ?? false}
+    />
     </TooltipProvider>
   );
 }
