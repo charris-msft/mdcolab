@@ -193,7 +193,9 @@ export function DocumentEditor({
       {editable && <BubbleToolbar editor={editor} editable={editable} onCreateComment={handleCreateComment} />}
       {!editable && <ReviewSelectionToolbar editor={editor} onCreateComment={handleCreateComment} />}
       <CodeBlockComponent editor={editor} />
-      <EditorContent editor={editor} />
+      <div className="flex-1 overflow-y-auto">
+        <EditorContent editor={editor} />
+      </div>
     </div>
   );
 }

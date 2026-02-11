@@ -39,7 +39,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
   if (!editor) return null;
 
   return (
-    <div className="flex items-center gap-0.5 flex-wrap p-2 border-b border-border sticky top-0 z-10 overflow-x-auto toolbar min-h-[44px] bg-card text-card-foreground">
+    <div className="flex items-center gap-0.5 flex-wrap p-2 border-b border-border shrink-0 z-10 overflow-x-auto toolbar min-h-[44px] bg-card text-card-foreground">
       {/* Undo/Redo */}
       <Button
         variant="ghost"
