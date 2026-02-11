@@ -85,7 +85,14 @@ export function ShareDialog({
       if (!res.ok) throw new Error("Failed to update sharing");
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: { sha?: string }) => {
+      if (data?.sha) {
+        // Update cache with new SHA to prevent 409 on rapid successive mutations
+        queryClient.setQueryData(["sharing", owner, repo], (old: SharingResponse | undefined) => {
+          if (!old) return old;
+          return { ...old, sha: data.sha };
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["sharing", owner, repo] });
     },
     onError: () => {

@@ -106,12 +106,7 @@ export async function PUT(
     );
   }
 
-  if (mode === "specific_people" && (!users || users.length === 0)) {
-    return NextResponse.json(
-      { error: "users are required when mode is specific_people" },
-      { status: 400 }
-    );
-  }
+  // Allow empty users for specific_people — author can add users later
 
   // Permission check: user must have push access
   const octokit = await getOctokit();
@@ -185,7 +180,7 @@ export async function PUT(
 
   // Write back
   try {
-    await octokit.repos.createOrUpdateFileContents({
+    const writeResponse = await octokit.repos.createOrUpdateFileContents({
       owner,
       repo,
       path: SHARING_PATH,
@@ -193,14 +188,14 @@ export async function PUT(
       content: Buffer.from(JSON.stringify(config, null, 2)).toString("base64"),
       ...(fileSha ? { sha: fileSha } : {}),
     });
+    const newSha = writeResponse.data.content?.sha;
+    return NextResponse.json({ success: true, sharing: config, sha: newSha });
   } catch {
     return NextResponse.json(
       { error: "Failed to update sharing config" },
       { status: 500 }
     );
   }
-
-  return NextResponse.json({ success: true, sharing: config });
 }
 
 export async function DELETE(
