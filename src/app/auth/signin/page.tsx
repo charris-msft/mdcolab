@@ -7,6 +7,8 @@ import { useEffect, useState, Suspense } from "react";
 function SignInContent() {
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
+  // Preserve the original URL so users land back where they came from after sign-in
+  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -15,11 +17,11 @@ function SignInContent() {
     if (error === "OAuthCallback") {
       setMessage("App installed successfully! Signing you in...");
       const timer = setTimeout(() => {
-        signIn("github", { callbackUrl: "/dashboard" });
+        signIn("github", { callbackUrl });
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [error]);
+  }, [error, callbackUrl]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
@@ -46,7 +48,7 @@ function SignInContent() {
         )}
 
         <button
-          onClick={() => signIn("github", { callbackUrl: "/dashboard" })}
+          onClick={() => signIn("github", { callbackUrl })}
           className="flex w-full items-center justify-center gap-3 rounded-lg bg-foreground px-4 py-3 text-sm font-medium text-background transition-opacity hover:opacity-90"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">

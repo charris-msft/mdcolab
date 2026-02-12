@@ -10,6 +10,7 @@ export default async function AppLayout({
   const session = await auth();
 
   if (!session?.user) {
+    // Redirect to NextAuth sign-in; it will pass callbackUrl to our custom sign-in page
     redirect("/api/auth/signin");
   }
 
