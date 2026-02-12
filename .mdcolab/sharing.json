@@ -3,9 +3,11 @@
   "documents": {
     "docs/github-auth-options.md": {
       "mode": "specific_people",
-      "users": [],
+      "users": [
+        "Nexlen"
+      ],
       "sharedBy": "charris-msft",
-      "sharedAt": "2026-02-12T16:53:23.319Z"
+      "sharedAt": "2026-02-12T16:55:55.229Z"
     }
   }
 }
