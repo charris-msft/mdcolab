@@ -2,9 +2,10 @@
   "version": 1,
   "documents": {
     "docs/github-auth-options.md": {
-      "mode": "anyone_with_link",
+      "mode": "specific_people",
+      "users": [],
       "sharedBy": "charris-msft",
-      "sharedAt": "2026-02-11T18:50:56.720Z"
+      "sharedAt": "2026-02-12T16:53:23.319Z"
     }
   }
 }
