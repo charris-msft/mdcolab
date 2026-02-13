@@ -1,22 +1,32 @@
 import { NextResponse } from "next/server";
 import { getOctokit } from "@/lib/github";
 import { isAppConfigured, getInstallationOctokit } from "@/lib/github-app";
-import { checkAnySharingAccess } from "@/lib/sharing-utils";
+import { checkAnySharingAccess, checkSharingAccess } from "@/lib/sharing-utils";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ owner: string; repo: string }> }
 ) {
   try {
     const { owner, repo } = await params;
+    const url = new URL(request.url);
+    const filePath = url.searchParams.get("file");
     let octokit;
     try {
       octokit = await getOctokit();
     } catch {
-      // Anonymous user — check if repo has "anyone_with_link" shared docs
+      // Anonymous user — check if repo has shared docs
       if (isAppConfigured()) {
         try {
           const installationOctokit = await getInstallationOctokit(owner, repo);
+          // If a specific file is requested, check its sharing config
+          if (filePath) {
+            const { authorized, allowEditing } = await checkSharingAccess(installationOctokit, owner, repo, filePath, null);
+            if (authorized) {
+              return NextResponse.json({ permission: allowEditing ? "write" : "read", canEdit: allowEditing, hasIssues: true, anonymous: true });
+            }
+          }
+          // Fallback: check if ANY doc is shared
           const { authorized } = await checkAnySharingAccess(installationOctokit, owner, repo, null);
           if (authorized) {
             return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true, anonymous: true });

@@ -143,15 +143,16 @@ export default function DocumentPage() {
 
   // Fetch permissions
   const { data: permData } = useQuery({
-    queryKey: ["permission", owner, repo],
+    queryKey: ["permission", owner, repo, filePath],
     queryFn: async () => {
-      const res = await fetch(`/api/repos/${owner}/${repo}/permission`);
+      const qs = new URLSearchParams({ file: filePath });
+      const res = await fetch(`/api/repos/${owner}/${repo}/permission?${qs}`);
       if (!res.ok) return { permission: "read" as const, canEdit: false, hasIssues: true };
       return res.json() as Promise<{ permission: string; canEdit: boolean; hasIssues: boolean }>;
     },
   });
 
-  const canEdit = isAnonymous ? false : (permData?.canEdit ?? false);
+  const canEdit = permData?.canEdit ?? false;
   const hasIssues = permData?.hasIssues ?? true;
 
   // Set file SHA when loaded

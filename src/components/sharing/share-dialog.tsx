@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Link2, Lock, Globe, Loader2, X, UserPlus, Trash2 } from "lucide-react";
+import { Link2, Lock, Globe, Loader2, X, UserPlus, Trash2, Pencil } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -64,6 +64,7 @@ export function ShareDialog({
 
   const doc = sharingData?.sharing?.documents?.[filePath];
   const mode: SharingMode = doc?.mode ?? "specific_people";
+  const allowEditing: boolean = doc?.allowEditing === true;
   const users: string[] = useMemo(
     () => doc?.users ?? [],
     [doc?.users]
@@ -76,6 +77,7 @@ export function ShareDialog({
       mode: SharingMode;
       users: string[];
       sha: string;
+      allowEditing?: boolean;
     }) => {
       const res = await fetch(`/api/sharing/${owner}/${repo}`, {
         method: "PUT",
@@ -102,9 +104,9 @@ export function ShareDialog({
 
   const setMode = useCallback(
     (newMode: SharingMode) => {
-      updateSharing({ path: filePath, mode: newMode, users, sha });
+      updateSharing({ path: filePath, mode: newMode, users, sha, allowEditing });
     },
-    [updateSharing, filePath, users, sha]
+    [updateSharing, filePath, users, sha, allowEditing]
   );
 
   const addUser = useCallback(() => {
@@ -119,9 +121,10 @@ export function ShareDialog({
       mode,
       users: [...users, username],
       sha,
+      allowEditing,
     });
     setUsernameInput("");
-  }, [usernameInput, users, updateSharing, filePath, mode, sha]);
+  }, [usernameInput, users, updateSharing, filePath, mode, sha, allowEditing]);
 
   const removeUser = useCallback(
     (username: string) => {
@@ -130,9 +133,10 @@ export function ShareDialog({
         mode,
         users: users.filter((u) => u !== username),
         sha,
+        allowEditing,
       });
     },
-    [users, updateSharing, filePath, mode, sha]
+    [users, updateSharing, filePath, mode, sha, allowEditing]
   );
 
   const { mutate: stopSharing, isPending: isUnsharing } = useMutation({
@@ -179,6 +183,10 @@ export function ShareDialog({
     [addUser]
   );
 
+  const toggleEditing = useCallback(() => {
+    updateSharing({ path: filePath, mode, users, sha, allowEditing: !allowEditing });
+  }, [updateSharing, filePath, mode, users, sha, allowEditing]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -218,6 +226,49 @@ export function ShareDialog({
                 onClick={() => setMode("anyone_with_link")}
               />
             </div>
+
+            {/* Allow editing toggle */}
+            {isShared && canEdit && (
+              <button
+                type="button"
+                onClick={toggleEditing}
+                disabled={isAnyPending}
+                className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                  allowEditing
+                    ? "border-amber-500/50 bg-amber-500/5 dark:bg-amber-500/10"
+                    : "border-border hover:bg-accent"
+                } ${isAnyPending ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+              >
+                <div
+                  className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
+                    allowEditing
+                      ? "bg-amber-500 text-white"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  <Pencil className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">Allow editing</div>
+                  <div className="text-xs text-muted-foreground">
+                    {allowEditing
+                      ? "Shared users can edit this document"
+                      : "Shared users can only view and comment"}
+                  </div>
+                </div>
+                <div
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                    allowEditing ? "bg-amber-500" : "bg-muted-foreground/30"
+                  }`}
+                >
+                  <span
+                    className={`inline-block size-4 rounded-full bg-white transition-transform ${
+                      allowEditing ? "translate-x-[18px]" : "translate-x-0.5"
+                    }`}
+                  />
+                </div>
+              </button>
+            )}
 
             {/* User list section */}
             {mode === "specific_people" && (

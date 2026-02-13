@@ -9,7 +9,7 @@ export async function checkSharingAccess(
   repo: string,
   filePath: string,
   userLogin: string | null | undefined
-): Promise<{ authorized: boolean; sharing: SharingConfig | null }> {
+): Promise<{ authorized: boolean; allowEditing: boolean; sharing: SharingConfig | null }> {
   try {
     const response = await installationOctokit.repos.getContent({
       owner,
@@ -19,7 +19,7 @@ export async function checkSharingAccess(
 
     const data = response.data;
     if (Array.isArray(data) || data.type !== "file") {
-      return { authorized: false, sharing: null };
+      return { authorized: false, allowEditing: false, sharing: null };
     }
 
     const content = Buffer.from(data.content, "base64").toString("utf-8");
@@ -27,11 +27,13 @@ export async function checkSharingAccess(
     const doc = sharing.documents[filePath];
 
     if (!doc) {
-      return { authorized: false, sharing };
+      return { authorized: false, allowEditing: false, sharing };
     }
 
+    const allowEditing = doc.allowEditing === true;
+
     if (doc.mode === "anyone_with_link") {
-      return { authorized: true, sharing };
+      return { authorized: true, allowEditing, sharing };
     }
 
     if (
@@ -39,12 +41,12 @@ export async function checkSharingAccess(
       userLogin &&
       doc.users?.some((u) => u.toLowerCase() === userLogin.toLowerCase())
     ) {
-      return { authorized: true, sharing };
+      return { authorized: true, allowEditing, sharing };
     }
 
-    return { authorized: false, sharing };
+    return { authorized: false, allowEditing: false, sharing };
   } catch {
-    return { authorized: false, sharing: null };
+    return { authorized: false, allowEditing: false, sharing: null };
   }
 }
 
