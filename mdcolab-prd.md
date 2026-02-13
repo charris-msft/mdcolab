@@ -630,3 +630,6 @@ Deployment uses **Azure Container Apps** (Consumption plan) instead of Azure App
 | **Round-trip fidelity** | The property that converting markdown → editor state → markdown produces identical output |
 | **Review mode** | A non-editable viewing mode where reviewers can read the document and add comments via a floating Comment button |
 | **Onboarding wizard** | A 4-page introductory flow shown on first visit to guide users through the app's features and security guidance |
+
+
+<!-- anonymous edit test -->
