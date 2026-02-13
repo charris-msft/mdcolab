@@ -1,14 +1,10 @@
 {
-  "version": 1,
   "documents": {
     "mdcolab-prd.md": {
       "sharedBy": "charris-msft",
-      "mode": "specific_people",
-      "allowEditing": true,
-      "sharedAt": "2026-02-13T06:43:31.952Z",
-      "users": [
-        "charristest2"
-      ]
+      "mode": "anyone_with_link",
+      "sharedAt": "2026-02-13T06:43:31.952Z"
     }
-  }
+  },
+  "version": 1
 }
