@@ -1,14 +1,10 @@
 {
   "version": 1,
   "documents": {
-    "docs/github-auth-options.md": {
-      "mode": "specific_people",
-      "users": [
-        "Nexlen",
-        "charristest1"
-      ],
+    "mdcolab-prd.md": {
+      "mode": "anyone_with_link",
       "sharedBy": "charris-msft",
-      "sharedAt": "2026-02-12T17:05:38.595Z"
+      "sharedAt": "2026-02-13T05:21:14.892Z"
     }
   }
 }
