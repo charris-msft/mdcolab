@@ -524,7 +524,8 @@ export async function POST(
             return NextResponse.json({ ok: true });
           }
         }
-      } catch {
+      } catch (fallbackErr) {
+        console.error("POST comments fallback error:", fallbackErr);
         // Fall through to error
       }
     }

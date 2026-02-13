@@ -32,6 +32,8 @@ import {
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useComments } from "@/hooks/use-comments";
+import { getGuestDisplayName, setGuestDisplayName, randomizeGuestName } from "@/lib/friendly-names";
+import { RefreshCw } from "lucide-react";
 
 type FilterStatus = "open" | "resolved" | "all";
 
@@ -122,7 +124,7 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
   const [orphanedExpanded, setOrphanedExpanded] = useState(false);
   const [guestName, setGuestName] = useState(() => {
     if (typeof window === "undefined") return "";
-    return localStorage.getItem("mdcolab-guest-name") || "";
+    return getGuestDisplayName();
   });
 
   const handleReply = useCallback(
@@ -207,7 +209,7 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
     const trimmed = docCommentBody.trim();
     if (!trimmed) return;
     if (isAnonymous && guestName.trim()) {
-      localStorage.setItem("mdcolab-guest-name", guestName.trim());
+      setGuestDisplayName(guestName.trim());
     }
     createThread(
       {
@@ -394,13 +396,24 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
             {showDocInput && (
               <div className="glass rounded-lg p-3 space-y-2">
                 {isAnonymous && (
-                  <input
-                    type="text"
-                    value={guestName}
-                    onChange={(e) => setGuestName(e.target.value)}
-                    placeholder="Your name"
-                    className="w-full text-sm bg-transparent border border-border/50 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary/50"
-                  />
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={guestName}
+                      onChange={(e) => setGuestName(e.target.value)}
+                      placeholder="Your name"
+                      className="flex-1 text-sm bg-transparent border border-border/50 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 shrink-0"
+                      title="Get a new random name"
+                      onClick={() => setGuestName(randomizeGuestName())}
+                    >
+                      <RefreshCw className="size-3" />
+                    </Button>
+                  </div>
                 )}
                 <textarea
                   value={docCommentBody}

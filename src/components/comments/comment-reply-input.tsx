@@ -4,6 +4,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { MentionInput } from "./mention-input";
+import { getGuestDisplayName, setGuestDisplayName, randomizeGuestName } from "@/lib/friendly-names";
+import { RefreshCw } from "lucide-react";
 
 interface CommentReplyInputProps {
   authorAvatarUrl?: string;
@@ -27,7 +29,7 @@ export function CommentReplyInput({
   const [body, setBody] = useState("");
   const [guestName, setGuestName] = useState(() => {
     if (typeof window === "undefined") return "";
-    return localStorage.getItem("mdcolab-guest-name") || "";
+    return getGuestDisplayName();
   });
   const mentionsRef = useRef<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -44,7 +46,7 @@ export function CommentReplyInput({
     const trimmed = body.trim();
     if (!trimmed) return;
     if (isAnonymous && guestName.trim()) {
-      localStorage.setItem("mdcolab-guest-name", guestName.trim());
+      setGuestDisplayName(guestName.trim());
     }
     onSubmit(trimmed, mentionsRef.current);
     setBody("");
@@ -65,13 +67,24 @@ export function CommentReplyInput({
       </Avatar>
       <div className="flex-1 space-y-2">
         {isAnonymous && (
-          <input
-            type="text"
-            value={guestName}
-            onChange={(e) => setGuestName(e.target.value)}
-            placeholder="Your name"
-            className="w-full text-sm bg-transparent border border-border/50 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary/50"
-          />
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+              placeholder="Your name"
+              className="flex-1 text-sm bg-transparent border border-border/50 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary/50"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 shrink-0"
+              title="Get a new random name"
+              onClick={() => setGuestName(randomizeGuestName())}
+            >
+              <RefreshCw className="size-3" />
+            </Button>
+          </div>
         )}
         <MentionInput
           value={body}

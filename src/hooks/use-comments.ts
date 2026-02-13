@@ -5,6 +5,7 @@ import { useCommentStore } from "@/stores/comment-store";
 import type { CommentThread, CommentAnchor, Comment } from "@/types";
 import { useEffect, useCallback } from "react";
 import { toast } from "sonner";
+import { getGuestDisplayName } from "@/lib/friendly-names";
 
 interface UseCommentsOptions {
   owner: string;
@@ -19,8 +20,8 @@ export function useComments({ owner, repo, branch, path }: UseCommentsOptions) {
   const apiBase = `/api/comments/${owner}/${repo}/${branch}/${path}`;
 
   const getAnonDisplayName = useCallback(() => {
-    if (typeof window === "undefined") return undefined;
-    return localStorage.getItem("mdcolab-guest-name") || undefined;
+    if (typeof window === "undefined") return "Anonymous";
+    return getGuestDisplayName();
   }, []);
 
   // Load comments from GitHub Issues
