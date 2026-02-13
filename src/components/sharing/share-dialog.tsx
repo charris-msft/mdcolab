@@ -210,8 +210,8 @@ export function ShareDialog({
                 label="Anyone with the link"
                 description={
                   isEmu
-                    ? "Not available for EMU organizations"
-                    : "Any signed-in GitHub user"
+                    ? "Not available for EMU organizations — anonymous public access is restricted"
+                    : "Anyone can view and comment, no sign-in required"
                 }
                 selected={mode === "anyone_with_link"}
                 disabled={!canEdit || isAnyPending || !!isEmu}

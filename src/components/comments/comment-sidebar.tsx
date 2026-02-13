@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useComments } from "@/hooks/use-comments";
 
 type FilterStatus = "open" | "resolved" | "all";
@@ -43,6 +44,8 @@ const filterLabels: Record<FilterStatus, string> = {
 export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
   const params = useParams<{ owner: string; repo: string; branch: string; path: string[] }>();
   const filePath = params.path?.join("/") ?? "";
+  const { status } = useSession();
+  const isAnonymous = status === "unauthenticated";
 
   const { replyToThread, resolveThread, reopenThread, createThread } = useComments({
     owner: params.owner,
@@ -84,7 +87,7 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
       // Author filter
       if (authorFilter.length > 0) {
         const matchesAuthor = t.comments.some((c) =>
-          authorFilter.includes(c.author.login)
+          authorFilter.includes(c.author.isAnonymous ? (c.author.displayName ?? "Anonymous") : (c.author.login ?? "unknown"))
         );
         if (!matchesAuthor) return false;
       }
@@ -117,6 +120,10 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
   const [showDocInput, setShowDocInput] = useState(false);
   const [docCommentBody, setDocCommentBody] = useState("");
   const [orphanedExpanded, setOrphanedExpanded] = useState(false);
+  const [guestName, setGuestName] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("mdcolab-guest-name") || "";
+  });
 
   const handleReply = useCallback(
     (threadId: string, body: string) => {
@@ -199,6 +206,9 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
   const handleAddDocComment = useCallback(() => {
     const trimmed = docCommentBody.trim();
     if (!trimmed) return;
+    if (isAnonymous && guestName.trim()) {
+      localStorage.setItem("mdcolab-guest-name", guestName.trim());
+    }
     createThread(
       {
         type: "document",
@@ -209,7 +219,7 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
     );
     setDocCommentBody("");
     setShowDocInput(false);
-  }, [docCommentBody, createThread]);
+  }, [docCommentBody, createThread, isAnonymous, guestName]);
 
   const handleSelect = useCallback(
     (threadId: string) => {
@@ -338,6 +348,7 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
                   <CommentThreadCard
                     thread={thread}
                     isActive={thread.id === activeThreadId}
+                    isAnonymous={isAnonymous}
                     onReply={handleReply}
                     onResolve={handleResolve}
                     onReopen={handleReopen}
@@ -365,6 +376,7 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
                       <CommentThreadCard
                         thread={thread}
                         isActive={thread.id === activeThreadId}
+                        isAnonymous={isAnonymous}
                         onReply={handleReply}
                         onResolve={handleResolve}
                         onReopen={handleReopen}
@@ -381,6 +393,15 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
             {/* Add general comment input */}
             {showDocInput && (
               <div className="glass rounded-lg p-3 space-y-2">
+                {isAnonymous && (
+                  <input
+                    type="text"
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                    placeholder="Your name"
+                    className="w-full text-sm bg-transparent border border-border/50 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  />
+                )}
                 <textarea
                   value={docCommentBody}
                   onChange={(e) => setDocCommentBody(e.target.value)}
@@ -451,6 +472,7 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
                         <CommentThreadCard
                           thread={thread}
                           isActive={thread.id === activeThreadId}
+                          isAnonymous={isAnonymous}
                           onReply={handleReply}
                           onResolve={handleResolve}
                           onReopen={handleReopen}

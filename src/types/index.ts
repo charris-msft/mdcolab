@@ -1,6 +1,8 @@
 export interface CommentAuthor {
-  login: string;
-  avatarUrl: string;
+  login: string | null;
+  displayName?: string;
+  avatarUrl: string | null;
+  isAnonymous?: boolean;
 }
 
 export interface SuggestedEdit {

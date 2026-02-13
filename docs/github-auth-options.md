@@ -446,7 +446,8 @@ When the **author** installs the GitHub App on their repo, the app gets an **ins
 │ 2. Clicks "Share" → Share dialog opens              │
 │ 3. Chooses sharing mode:                            │
 │    • "Specific people" → enters GitHub usernames    │
-│    • "Anyone with the link" → any signed-in user    │
+│    • "Anyone with the link" → truly anyone, no      │
+│       sign-in required                              │
 │ 4. mdcolab saves config to .mdcolab/sharing.json    │
 │    in the repo (via installation token)             │
 │ 5. Author copies URL and sends to reviewer          │
@@ -456,16 +457,20 @@ When the **author** installs the GitHub App on their repo, the app gets an **ins
 │ REVIEWING                                           │
 │                                                     │
 │ 1. Reviewer clicks shared URL                       │
-│ 2. Signs into mdcolab with GitHub                   │
+│ 2. "specific_people" → must sign in with GitHub     │
+│    "anyone_with_link" → no sign-in needed           │
 │ 3. mdcolab reads .mdcolab/sharing.json              │
 │    (using installation token, not reviewer's token) │
 │ 4. Checks: is this reviewer authorized?             │
 │    • "specific_people" → is username in the list?   │
-│    • "anyone_with_link" → yes, they're signed in    │
+│    • "anyone_with_link" → yes, anonymous access OK  │
 │ 5. If authorized: fetches content via installation  │
 │    token and serves to reviewer                     │
 │ 6. If not authorized: shows "Request access from    │
 │    @author" UI                                      │
+│                                                     │
+│ Anonymous users can view and comment with a display │
+│ name but edits still require GitHub authentication. │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -474,7 +479,7 @@ When the **author** installs the GitHub App on their repo, the app gets an **ins
 | Mode | Who can access | Use case | Available on |
 |---|---|---|---|
 | **Specific people** | Only listed GitHub usernames | Confidential docs, controlled review | All accounts |
-| **Anyone with the link** | Any signed-in GitHub user | Broad sharing, low friction | Personal accounts only |
+| **Anyone with the link** | Anyone with the URL — no sign-in required. Anonymous users can view and comment with a display name; edits require GitHub auth. | Broad sharing, maximum accessibility | Personal accounts only |
 
 ### Sharing Configuration
 
@@ -531,7 +536,7 @@ PLANNED (installation token for shared docs):
 
 | Risk | Mitigation |
 |---|---|
-| **Leaked URLs** expose private docs | "Specific people" mode limits access to listed usernames; reviewer must also sign in with GitHub |
+| **Leaked URLs** expose private docs | "Specific people" mode limits access to listed usernames; "anyone_with_link" grants anonymous access so authors should use it only for non-sensitive content |
 | **Installation token is overpowered** | Token scoped to repos where app is installed; sharing config limits which docs are served |
 | **Author could share too broadly** | "Anyone with the link" is opt-in per document; defaults to "specific people" |
 | **Sharing config could be tampered with** | Only users with repo push access can modify `.mdcolab/sharing.json`; changes tracked in git |
@@ -540,7 +545,7 @@ PLANNED (installation token for shared docs):
 
 For enterprise-managed (EMU) accounts, the sharing model is **more restrictive**:
 
-- **"Anyone with the link" mode is disabled** — EMU users can only use "Specific people" mode
+- **"Anyone with the link" mode is disabled** — EMU users can only use "Specific people" mode, since "anyone_with_link" allows truly anonymous public access
 - **Leaked link = limited blast radius** — even if a URL is forwarded, the recipient must be on the explicit share list AND signed in with GitHub
 - **Enterprise admin controls the app installation** — so they control which repos can be shared at all
 - **Future:** Could restrict sharing to users within the same enterprise/org
@@ -582,7 +587,7 @@ This addresses the concern that a leaked URL to an internal doc could expose sen
 **Next (planned):** Installation token sharing model (see "Document Sharing Model" section above).
 - Will enable sharing private repo documents with any GitHub user, without requiring them to be a repo collaborator
 - Author controls access via `.mdcolab/sharing.json` stored in the repo
-- Two modes: "specific people" (all accounts) and "anyone with the link" (personal accounts only)
+- Two modes: "specific people" (all accounts) and "anyone with the link" (personal accounts only; grants anonymous access — no GitHub sign-in needed to view/comment)
 - EMU accounts restricted to "specific people" mode for security
 
 ---

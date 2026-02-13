@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getOctokit } from "@/lib/github";
+import { isAppConfigured, getInstallationOctokit } from "@/lib/github-app";
+import { checkAnySharingAccess } from "@/lib/sharing-utils";
 
 export async function GET(
   _request: Request,
@@ -11,6 +13,18 @@ export async function GET(
     try {
       octokit = await getOctokit();
     } catch {
+      // Anonymous user — check if repo has "anyone_with_link" shared docs
+      if (isAppConfigured()) {
+        try {
+          const installationOctokit = await getInstallationOctokit(owner, repo);
+          const { authorized } = await checkAnySharingAccess(installationOctokit, owner, repo, null);
+          if (authorized) {
+            return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true, anonymous: true });
+          }
+        } catch {
+          // Fall through to default
+        }
+      }
       return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true });
     }
 

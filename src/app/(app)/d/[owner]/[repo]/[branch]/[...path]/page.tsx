@@ -27,6 +27,8 @@ import {
   Play,
   Lock,
   ExternalLink,
+  Info,
+  X,
 } from "lucide-react";
 import { CopilotIcon } from "@/components/icons/copilot-icon";
 import Link from "next/link";
@@ -67,7 +69,9 @@ export default function DocumentPage() {
   const [editMode, setEditMode] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const isAnonymous = status === "unauthenticated";
+  const [guestBannerDismissed, setGuestBannerDismissed] = useState(false);
   const sessionAny = session as unknown as Record<string, unknown> | null;
   const author = {
     login: (sessionAny?.login as string) ?? session?.user?.name ?? "anonymous",
@@ -77,6 +81,19 @@ export default function DocumentPage() {
     useEditorStore();
   const { threads, isSidebarOpen, setSidebarOpen } = useCommentStore();
   const { isOpen: isAIOpen, togglePanel: toggleAIPanel } = useAIStore();
+
+  // Check Copilot availability
+  const { data: aiHealth } = useQuery({
+    queryKey: ["ai-health"],
+    queryFn: async () => {
+      const res = await fetch("/api/ai/health");
+      if (!res.ok) return { available: false };
+      return res.json() as Promise<{ available: boolean }>;
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: !!session,
+  });
+  const copilotAvailable = aiHealth?.available ?? false;
 
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -134,7 +151,7 @@ export default function DocumentPage() {
     },
   });
 
-  const canEdit = permData?.canEdit ?? false;
+  const canEdit = isAnonymous ? false : (permData?.canEdit ?? false);
   const hasIssues = permData?.hasIssues ?? true;
 
   // Set file SHA when loaded
@@ -227,7 +244,7 @@ export default function DocumentPage() {
       },
       {
         ...SHORTCUTS.AI_PANEL,
-        handler: () => toggleAIPanel(),
+        handler: () => { if (copilotAvailable) toggleAIPanel(); },
       },
       {
         key: 'F5',
@@ -235,7 +252,7 @@ export default function DocumentPage() {
         description: 'Present as slideshow',
       },
     ],
-    [handleSave, setSidebarOpen, isSidebarOpen, nextComment, prevComment, toggleAIPanel, setPresentationMode]
+    [handleSave, setSidebarOpen, isSidebarOpen, nextComment, prevComment, toggleAIPanel, setPresentationMode, copilotAvailable]
   );
   useKeyboardShortcuts(shortcuts);
 
@@ -411,6 +428,7 @@ export default function DocumentPage() {
           <Separator orientation="vertical" className="h-6" />
 
           {/* Share */}
+          {!isAnonymous && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -430,8 +448,10 @@ export default function DocumentPage() {
                 : "Enable Issues in repo settings to share"}
             </TooltipContent>
           </Tooltip>
+          )}
 
           {/* AI Assistant */}
+          {session && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -439,12 +459,16 @@ export default function DocumentPage() {
                 size="sm"
                 className={`gap-1.5 ${isAIOpen ? "bg-accent text-accent-foreground" : ""}`}
                 onClick={toggleAIPanel}
+                disabled={!copilotAvailable}
               >
                 <CopilotIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Copilot (⌘J)</TooltipContent>
+            <TooltipContent>
+              {copilotAvailable ? "Copilot (⌘J)" : "GitHub Copilot subscription required"}
+            </TooltipContent>
           </Tooltip>
+          )}
 
           {/* Comment count */}
           <Tooltip>
@@ -549,6 +573,28 @@ export default function DocumentPage() {
         </div>
       </div>
 
+      {/* Guest banner */}
+      {isAnonymous && !guestBannerDismissed && (
+        <div className="flex items-center justify-between px-4 py-1.5 bg-indigo-500/10 border-b border-indigo-500/20 text-sm">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Info className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+            <span className="text-xs">
+              Viewing as guest —{" "}
+              <a
+                href={`/auth/signin?callbackUrl=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "")}`}
+                className="font-medium text-indigo-400 underline hover:text-indigo-300"
+              >
+                Sign in with GitHub
+              </a>{" "}
+              to connect your identity
+            </span>
+          </div>
+          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-muted-foreground" onClick={() => setGuestBannerDismissed(true)}>
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+      )}
+
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
         {/* Editor */}
@@ -570,7 +616,7 @@ export default function DocumentPage() {
         )}
 
         {/* AI Chat Panel */}
-        {isAIOpen && (
+        {isAIOpen && copilotAvailable && (
           <AIChatPanel documentContent={editorContent || fileData.content} />
         )}
 

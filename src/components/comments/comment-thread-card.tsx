@@ -16,6 +16,7 @@ import type { CommentThread, Comment } from "@/types";
 export interface CommentThreadCardProps {
   thread: CommentThread;
   isActive: boolean;
+  isAnonymous?: boolean;
   onReply: (threadId: string, body: string) => void;
   onResolve: (threadId: string) => void;
   onReopen: (threadId: string) => void;
@@ -44,14 +45,14 @@ function CommentItem({
       <div className="flex items-center gap-2">
         <Avatar size="sm">
           <AvatarImage
-            src={comment.author.avatarUrl}
-            alt={comment.author.login}
+            src={comment.author.avatarUrl ?? undefined}
+            alt={comment.author.displayName ?? comment.author.login ?? "Anonymous"}
           />
           <AvatarFallback>
-            {comment.author.login[0]?.toUpperCase()}
+            {(comment.author.displayName ?? comment.author.login ?? "A")[0]?.toUpperCase()}
           </AvatarFallback>
         </Avatar>
-        <span className="text-sm font-medium">@{comment.author.login}</span>
+        <span className="text-sm font-medium">{comment.author.isAnonymous ? (comment.author.displayName ?? "Anonymous") : `@${comment.author.login}`}</span>
         <span className="text-xs text-muted-foreground">
           {relativeTime(comment.createdAt)}
         </span>
@@ -77,6 +78,7 @@ function CommentItem({
 export function CommentThreadCard({
   thread,
   isActive,
+  isAnonymous,
   onReply,
   onResolve,
   onReopen,
@@ -173,6 +175,7 @@ export function CommentThreadCard({
               onCancel={() => setShowReplyInput(false)}
               submitLabel={thread.comments.length === 0 ? "Comment" : "Reply"}
               autoFocus={autoReply}
+              isAnonymous={isAnonymous}
             />
           </div>
         )}

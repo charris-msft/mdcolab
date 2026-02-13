@@ -8,7 +8,7 @@ export async function checkSharingAccess(
   owner: string,
   repo: string,
   filePath: string,
-  userLogin: string
+  userLogin: string | null | undefined
 ): Promise<{ authorized: boolean; sharing: SharingConfig | null }> {
   try {
     const response = await installationOctokit.repos.getContent({
@@ -36,6 +36,7 @@ export async function checkSharingAccess(
 
     if (
       doc.mode === "specific_people" &&
+      userLogin &&
       doc.users?.some((u) => u.toLowerCase() === userLogin.toLowerCase())
     ) {
       return { authorized: true, sharing };
@@ -54,7 +55,7 @@ export async function checkAnySharingAccess(
   installationOctokit: Octokit,
   owner: string,
   repo: string,
-  userLogin: string
+  userLogin: string | null | undefined
 ): Promise<{ authorized: boolean; sharing: SharingConfig | null }> {
   try {
     const response = await installationOctokit.repos.getContent({
@@ -77,6 +78,7 @@ export async function checkAnySharingAccess(
       }
       if (
         doc.mode === "specific_people" &&
+        userLogin &&
         doc.users?.some((u) => u.toLowerCase() === userLogin.toLowerCase())
       ) {
         return { authorized: true, sharing };
