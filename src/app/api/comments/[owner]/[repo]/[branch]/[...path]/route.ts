@@ -356,7 +356,86 @@ export async function POST(
   try {
     const { owner, repo, path: pathSegments } = await params;
     const filePath = pathSegments.join("/");
-    const octokit = await getOctokit();
+    let octokit;
+    try {
+      octokit = await getOctokit();
+    } catch (authErr) {
+      // Anonymous user — try installation token fallback
+      if (isAppConfigured()) {
+        try {
+          const session = await auth().catch(() => null);
+          const login = (session as any)?.login ?? null;
+          const isAnonymous = !login;
+          const installationOctokit = await getInstallationOctokit(owner, repo);
+          const { authorized } = await checkSharingAccess(installationOctokit, owner, repo, filePath, login);
+          if (authorized) {
+            const action: string = body.action;
+            const displayName: string = body.displayName || "Anonymous";
+
+            if (action === "create") {
+              const anchor: CommentAnchor = body.anchor;
+              const commentBody: string = body.body;
+              const labels: string[] = [];
+              const fileLabel = `file:${filePath.split("/").pop() ?? filePath}`;
+              const pathLabel = `path:${filePath}`;
+              if (await ensureLabelSafe(installationOctokit, owner, repo, LABEL, LABEL_COLOR, "mdcolab comment threads")) labels.push(LABEL);
+              if (await ensureLabelSafe(installationOctokit, owner, repo, fileLabel, "0E8A16", `mdcolab comments for ${filePath}`)) labels.push(fileLabel);
+              if (await ensureLabelSafe(installationOctokit, owner, repo, pathLabel, "0E8A16", `mdcolab path ${filePath}`)) labels.push(pathLabel);
+              const selectedText = anchor.selectedText || "General comment";
+              const truncated = selectedText.length > 50 ? selectedText.slice(0, 50) + "…" : selectedText;
+              const title = `[mdcolab] "${truncated}" — ${filePath}`;
+              const anonAuthor = isAnonymous ? { displayName } : undefined;
+              const { data: issue } = await installationOctokit.issues.create({
+                owner,
+                repo,
+                title,
+                body: buildIssueBody(anchor, commentBody, filePath, anonAuthor),
+                labels: labels.length > 0 ? labels : undefined,
+              });
+              const thread: CommentThread = {
+                id: String(issue.number),
+                status: "open",
+                anchor,
+                comments: [
+                  toComment({ id: issue.id, body: commentBody, user: issue.user as GitHubUser | null, created_at: issue.created_at, updated_at: issue.updated_at }, anonAuthor),
+                ],
+              };
+              return NextResponse.json({ thread });
+            }
+
+            if (action === "reply") {
+              const issueNumber: number = body.issueNumber;
+              const commentBody: string = body.body;
+              const finalBody = isAnonymous ? buildAnonCommentBody(commentBody, displayName) : commentBody;
+              const { data: comment } = await installationOctokit.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: finalBody,
+              });
+              const anonOverride = isAnonymous ? { displayName } : undefined;
+              return NextResponse.json({
+                comment: toComment({ id: comment.id, body: commentBody, user: comment.user as GitHubUser | null, created_at: comment.created_at, updated_at: comment.updated_at }, anonOverride),
+              });
+            }
+
+            if (action === "resolve" || action === "reopen") {
+              const issueNumber: number = body.issueNumber;
+              await installationOctokit.issues.update({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                state: action === "resolve" ? "closed" : "open",
+              });
+              return NextResponse.json({ ok: true });
+            }
+          }
+        } catch (fallbackErr) {
+          console.error("POST anonymous comment fallback error:", fallbackErr);
+        }
+      }
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
 
     const action: string = body.action; // "create" | "reply" | "resolve" | "reopen"
 
