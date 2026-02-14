@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEditorStore } from "@/stores/editor-store";
 import { useCommentStore } from "@/stores/comment-store";
 import { useAIStore } from "@/stores/ai-store";
@@ -81,6 +81,7 @@ export default function DocumentPage() {
     useEditorStore();
   const { threads, isSidebarOpen, setSidebarOpen } = useCommentStore();
   const { isOpen: isAIOpen, togglePanel: toggleAIPanel } = useAIStore();
+  const queryClient = useQueryClient();
 
   // Check Copilot availability
   const { data: aiHealth } = useQuery({
@@ -139,6 +140,7 @@ export default function DocumentPage() {
       if (!res.ok) throw new Error("Failed to load file");
       return res.json() as Promise<{ content: string; sha: string; path: string }>;
     },
+    refetchInterval: 10000,
   });
 
   // Fetch permissions
@@ -155,12 +157,14 @@ export default function DocumentPage() {
   const canEdit = permData?.canEdit ?? false;
   const hasIssues = permData?.hasIssues ?? true;
 
-  // Set file SHA when loaded
+  // Set file SHA when loaded (skip if user has unsaved edits)
   useEffect(() => {
     if (fileData) {
-      setFileSha(fileData.sha);
+      if (!isDirty) {
+        setFileSha(fileData.sha);
+        setDirty(false);
+      }
       setFilePath(filePath);
-      setDirty(false);
       addRecentDoc({
         owner,
         repo,
@@ -169,7 +173,7 @@ export default function DocumentPage() {
         fileName,
       }, author.login);
     }
-  }, [fileData, filePath, setFileSha, setFilePath, setDirty, owner, repo, branch, fileName, author.login]);
+  }, [fileData, filePath, isDirty, setFileSha, setFilePath, setDirty, owner, repo, branch, fileName, author.login]);
 
   // Save mutation
   const saveMutation = useMutation({
@@ -496,19 +500,21 @@ export default function DocumentPage() {
             </TooltipContent>
           </Tooltip>
 
-          {/* Refresh comments */}
+          {/* Refresh */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => refreshComments()}
-                title="Refresh comments"
+                onClick={() => {
+                  refreshComments();
+                  queryClient.invalidateQueries({ queryKey: ["file", owner, repo, branch, filePath] });
+                }}
               >
                 <RefreshCw className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Refresh comments</TooltipContent>
+            <TooltipContent>Refresh</TooltipContent>
           </Tooltip>
 
           {/* Sidebar toggle */}
