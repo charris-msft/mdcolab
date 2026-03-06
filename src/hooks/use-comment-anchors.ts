@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { type Editor } from "@tiptap/react";
 import { useCommentStore } from "@/stores/comment-store";
 import type { CommentThread } from "@/types";
@@ -82,10 +82,9 @@ export function useCommentAnchors(editor: Editor | null) {
     });
   }, [editor, threads]);
 
-  // Scroll to the anchored text when a comment is clicked (activeThreadId changes)
-  useEffect(() => {
+  // Scroll to and highlight the anchor for a given threadId
+  const scrollToThread = useCallback((threadId: string) => {
     if (!editor) return;
-
     const editorEl = editor.view.dom;
 
     // Remove active class from all comment marks
@@ -93,47 +92,69 @@ export function useCommentAnchors(editor: Editor | null) {
       el.classList.remove('active-comment');
     });
 
-    if (!activeThreadId) return;
-
-    // Find the comment mark in the document
-    const markType = editor.schema.marks.commentMark;
-    if (!markType) return;
-
-    let targetPos: number | null = null;
-
-    editor.state.doc.descendants((node, pos) => {
-      if (targetPos !== null) return false;
-      const mark = node.marks.find(
-        (m) => m.type === markType && m.attrs.threadId === activeThreadId
-      );
-      if (mark) {
-        targetPos = pos;
-        return false;
-      }
-      return true;
-    });
-
-    if (targetPos !== null) {
-      // Scroll the editor to the mark position
-      const domPos = editor.view.domAtPos(targetPos);
-      if (domPos.node) {
-        const element =
-          domPos.node instanceof HTMLElement
-            ? domPos.node
-            : domPos.node.parentElement;
-        element?.scrollIntoView({ behavior: "smooth", block: "center" });
-
-        // Add active class to all spans with this threadId
-        const commentSpans = editorEl.querySelectorAll(`[data-comment-mark="${activeThreadId}"]`);
+    // Small delay to let marks be applied first
+    setTimeout(() => {
+      // Try DOM-based approach first (most reliable)
+      const commentSpans = editorEl.querySelectorAll(`[data-comment-mark="${threadId}"]`);
+      if (commentSpans.length > 0) {
+        commentSpans[0].scrollIntoView({ behavior: "smooth", block: "center" });
         commentSpans.forEach(el => el.classList.add('active-comment'));
+        return;
+      }
 
-        // Fallback: if no data attribute found, highlight the element itself
-        if (commentSpans.length === 0 && element) {
-          element.classList.add('active-comment');
+      // Fallback: search ProseMirror marks
+      const markType = editor.schema.marks.commentMark;
+      if (!markType) return;
+
+      let targetPos: number | null = null;
+      editor.state.doc.descendants((node, pos) => {
+        if (targetPos !== null) return false;
+        const mark = node.marks.find(
+          (m) => m.type === markType && m.attrs.threadId === threadId
+        );
+        if (mark) {
+          targetPos = pos;
+          return false;
+        }
+        return true;
+      });
+
+      if (targetPos !== null) {
+        const domPos = editor.view.domAtPos(targetPos);
+        if (domPos.node) {
+          const element =
+            domPos.node instanceof HTMLElement
+              ? domPos.node
+              : domPos.node.parentElement;
+          element?.scrollIntoView({ behavior: "smooth", block: "center" });
+          if (element) element.classList.add('active-comment');
         }
       }
+    }, 50);
+  }, [editor]);
+
+  // Scroll when activeThreadId changes via store
+  useEffect(() => {
+    if (!editor || !activeThreadId) {
+      if (editor) {
+        editor.view.dom.querySelectorAll('.active-comment').forEach(el => {
+          el.classList.remove('active-comment');
+        });
+      }
+      return;
     }
-  }, [editor, activeThreadId]);
+    scrollToThread(activeThreadId);
+  }, [editor, activeThreadId, scrollToThread]);
+
+  // Also listen for the custom event (handles re-clicks on the same comment)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const threadId = (e as CustomEvent).detail?.threadId;
+      if (threadId) scrollToThread(threadId);
+    };
+    window.addEventListener("comment:scroll-to-anchor", handler);
+    return () => window.removeEventListener("comment:scroll-to-anchor", handler);
+  }, [scrollToThread]);
 
   // Click on highlighted text in the document activates the corresponding comment
   useEffect(() => {
