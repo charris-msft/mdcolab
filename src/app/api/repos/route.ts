@@ -1,22 +1,35 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getOctokit, getSession } from "@/lib/github";
 import type { GitHubRepo } from "@/types";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const octokit = await getOctokit();
     const session = await getSession();
     const login = (session as any)?.login as string;
+    const limitParam = req.nextUrl.searchParams.get("limit");
+    const limit = limitParam ? Math.min(parseInt(limitParam, 10), 100) : undefined;
 
-    // Paginate through ALL repos
-    const allRepos = await octokit.paginate(
-      octokit.repos.listForAuthenticatedUser,
-      {
+    let allRepos;
+    if (limit) {
+      // Fast path: single page, no pagination
+      const { data } = await octokit.repos.listForAuthenticatedUser({
         sort: "updated",
         direction: "desc",
-        per_page: 100,
-      }
-    );
+        per_page: limit,
+      });
+      allRepos = data;
+    } else {
+      // Full fetch: paginate through ALL repos
+      allRepos = await octokit.paginate(
+        octokit.repos.listForAuthenticatedUser,
+        {
+          sort: "updated",
+          direction: "desc",
+          per_page: 100,
+        }
+      );
+    }
 
     const repos: GitHubRepo[] = allRepos.map((r) => ({
       id: r.id,

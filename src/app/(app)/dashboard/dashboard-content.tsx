@@ -8,6 +8,26 @@ import Link from "next/link";
 import type { GitHubRepo } from "@/types";
 import { getRecentDocs, type RecentDoc } from "@/lib/recent-docs";
 
+const REPOS_CACHE_KEY = "mdcolab:repos-cache";
+
+function getCachedRepos(): GitHubRepo[] | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = localStorage.getItem(REPOS_CACHE_KEY);
+    if (!raw) return undefined;
+    const { repos, ts } = JSON.parse(raw);
+    // Expire after 1 hour
+    if (Date.now() - ts > 60 * 60 * 1000) return undefined;
+    return repos as GitHubRepo[];
+  } catch { return undefined; }
+}
+
+function setCachedRepos(repos: GitHubRepo[]) {
+  try {
+    localStorage.setItem(REPOS_CACHE_KEY, JSON.stringify({ repos: repos.slice(0, 12), ts: Date.now() }));
+  } catch { /* quota exceeded — ignore */ }
+}
+
 function formatRelativeTime(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const minutes = Math.floor(diff / 60000);
@@ -43,12 +63,15 @@ export function DashboardContent() {
   }, [login]);
 
   const { data: repos, isLoading, error } = useQuery<GitHubRepo[]>({
-    queryKey: ["repos"],
+    queryKey: ["repos", "dashboard"],
     queryFn: async () => {
-      const res = await fetch("/api/repos");
+      const res = await fetch("/api/repos?limit=12");
       if (!res.ok) throw new Error("Failed to fetch repos");
-      return res.json();
+      const data = await res.json();
+      setCachedRepos(data);
+      return data;
     },
+    placeholderData: getCachedRepos,
   });
 
   return (
@@ -157,7 +180,7 @@ export function DashboardContent() {
 
         {repos && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {repos.slice(0, 12).map((repo) => (
+            {repos.map((repo) => (
               <div
                 key={repo.id}
                 className="group relative rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-card/80"
