@@ -3,10 +3,30 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
-import { Star, Clock, FileText, ArrowRight } from "lucide-react";
+import { Star, Clock, FileText, ArrowRight, ExternalLink, Lock, Globe } from "lucide-react";
 import Link from "next/link";
 import type { GitHubRepo } from "@/types";
 import { getRecentDocs, type RecentDoc } from "@/lib/recent-docs";
+
+const REPOS_CACHE_KEY = "mdcolab:repos-cache";
+
+function getCachedRepos(): GitHubRepo[] | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = localStorage.getItem(REPOS_CACHE_KEY);
+    if (!raw) return undefined;
+    const { repos, ts } = JSON.parse(raw);
+    // Expire after 1 hour
+    if (Date.now() - ts > 60 * 60 * 1000) return undefined;
+    return repos as GitHubRepo[];
+  } catch { return undefined; }
+}
+
+function setCachedRepos(repos: GitHubRepo[]) {
+  try {
+    localStorage.setItem(REPOS_CACHE_KEY, JSON.stringify({ repos: repos.slice(0, 12), ts: Date.now() }));
+  } catch { /* quota exceeded — ignore */ }
+}
 
 function formatRelativeTime(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -34,19 +54,24 @@ const languageColors: Record<string, string> = {
 
 export function DashboardContent() {
   const { data: session } = useSession();
+  const sessionAny = session as unknown as Record<string, unknown> | null;
+  const login = (sessionAny?.login as string) ?? session?.user?.name;
   const [recentDocs, setRecentDocs] = useState<RecentDoc[]>([]);
 
   useEffect(() => {
-    setRecentDocs(getRecentDocs());
-  }, []);
+    if (login) setRecentDocs(getRecentDocs(login));
+  }, [login]);
 
   const { data: repos, isLoading, error } = useQuery<GitHubRepo[]>({
-    queryKey: ["repos"],
+    queryKey: ["repos", "dashboard"],
     queryFn: async () => {
-      const res = await fetch("/api/repos?per_page=12");
+      const res = await fetch("/api/repos?limit=12");
       if (!res.ok) throw new Error("Failed to fetch repos");
-      return res.json();
+      const data = await res.json();
+      setCachedRepos(data);
+      return data;
     },
+    placeholderData: getCachedRepos,
   });
 
   return (
@@ -117,12 +142,23 @@ export function DashboardContent() {
       <section>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Your Repositories</h2>
-          <Link
-            href="/repos"
-            className="flex items-center gap-1 text-sm text-primary hover:underline"
-          >
-            View all <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <div className="flex items-center gap-3">
+            <a
+              href="https://github.com/apps/mdcolab1-ai/installations/new"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Connect private repos
+            </a>
+            <Link
+              href="/repos"
+              className="flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              View all <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         </div>
 
         {isLoading && (
@@ -145,19 +181,32 @@ export function DashboardContent() {
         {repos && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {repos.map((repo) => (
-              <Link
+              <div
                 key={repo.id}
-                href={`/repos/${repo.owner.login}/${repo.name}`}
-                className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-card/80"
+                className="group relative rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-card/80"
               >
+                <a
+                  href={`https://github.com/${repo.owner.login}/${repo.name}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-foreground z-10"
+                  title="Open on GitHub"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+                <Link
+                  href={`/repos/${repo.owner.login}/${repo.name}`}
+                  className="block"
+                >
                 <div className="flex items-start justify-between">
                   <h3 className="font-semibold text-foreground group-hover:text-primary">
                     <span className="text-muted-foreground font-normal">{repo.owner.login}/</span>{repo.name}
                   </h3>
-                  {repo.private && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      Private
-                    </span>
+                  {repo.private ? (
+                    <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-1" />
+                  ) : (
+                    <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-1" />
                   )}
                 </div>
                 <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
@@ -183,7 +232,8 @@ export function DashboardContent() {
                     {formatRelativeTime(repo.updated_at)}
                   </span>
                 </div>
-              </Link>
+                </Link>
+              </div>
             ))}
           </div>
         )}

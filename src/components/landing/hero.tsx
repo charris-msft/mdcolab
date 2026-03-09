@@ -33,9 +33,9 @@ export function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: "easeOut" }}
         >
-          Markdown collaboration,
+          AI-powered markdown
           <br />
-          <span className="text-primary">reimagined.</span>
+          collaboration, <span className="text-primary">reimagined.</span>
         </motion.h1>
 
         <motion.p
@@ -44,8 +44,8 @@ export function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.15, ease: "easeOut" }}
         >
-          Write in a rich WYSIWYG editor. Share via URL. Get Word-style
-          comments. All version-controlled in GitHub.
+          Write with a rich WYSIWYG editor and built-in Copilot AI. Share via
+          URL. Get Word-style comments. All version-controlled in GitHub.
         </motion.p>
 
         <motion.div

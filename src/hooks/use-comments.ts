@@ -5,6 +5,7 @@ import { useCommentStore } from "@/stores/comment-store";
 import type { CommentThread, CommentAnchor, Comment } from "@/types";
 import { useEffect, useCallback } from "react";
 import { toast } from "sonner";
+import { getGuestDisplayName } from "@/lib/friendly-names";
 
 interface UseCommentsOptions {
   owner: string;
@@ -17,6 +18,11 @@ export function useComments({ owner, repo, branch, path }: UseCommentsOptions) {
   const { setThreads, addThread, updateThread, addReply } = useCommentStore();
   const queryClient = useQueryClient();
   const apiBase = `/api/comments/${owner}/${repo}/${branch}/${path}`;
+
+  const getAnonDisplayName = useCallback(() => {
+    if (typeof window === "undefined") return "Anonymous";
+    return getGuestDisplayName();
+  }, []);
 
   // Load comments from GitHub Issues
   const { isLoading, error, data } = useQuery({
@@ -45,7 +51,7 @@ export function useComments({ owner, repo, branch, path }: UseCommentsOptions) {
       const res = await fetch(apiBase, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create", anchor: params.anchor, body: params.body }),
+        body: JSON.stringify({ action: "create", anchor: params.anchor, body: params.body, displayName: getAnonDisplayName() }),
       });
       if (!res.ok) throw new Error("Failed to create thread");
       return res.json() as Promise<{ thread: CommentThread }>;
@@ -64,7 +70,7 @@ export function useComments({ owner, repo, branch, path }: UseCommentsOptions) {
       const res = await fetch(apiBase, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reply", issueNumber: params.issueNumber, body: params.body }),
+        body: JSON.stringify({ action: "reply", issueNumber: params.issueNumber, body: params.body, displayName: getAnonDisplayName() }),
       });
       if (!res.ok) throw new Error("Failed to reply");
       return res.json() as Promise<{ comment: Comment }>;

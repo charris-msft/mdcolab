@@ -400,6 +400,160 @@ This would give us the best of both worlds: broad repo access (OAuth flow, no in
 
 ---
 
+## Document Sharing Model (Planned)
+
+> **Status:** Planned. This section describes the architecture for sharing private repo documents with reviewers who don't have direct GitHub access to the repo.
+
+### The Problem with User-to-Server Tokens
+
+The current implementation uses **user-to-server tokens** for all API calls. This means every request to GitHub is made *as the signed-in user*. When an author shares a private repo document URL with a reviewer:
+
+1. The reviewer signs into mdcolab
+2. mdcolab calls GitHub API using the **reviewer's** token
+3. GitHub checks the **reviewer's** access to the repo → **403 Forbidden**
+4. The reviewer sees "Grant repo access" — but installing the app on their own account doesn't help, because the repo belongs to the **author**
+
+**Result:** Sharing private repo documents with external reviewers is impossible under the current model. The reviewer would need to be a GitHub collaborator on the repo, which defeats the purpose of mdcolab.
+
+### Solution: Installation Access Tokens
+
+GitHub Apps have two types of tokens:
+
+| Token Type | Acts As | Access Scope |
+|---|---|---|
+| **User-to-server** (current) | The signed-in user | Repos the *user* can access |
+| **Installation access** (planned) | The app itself | Repos where the *app is installed* |
+
+When the **author** installs the GitHub App on their repo, the app gets an **installation access token** that can read/write that repo — regardless of who is using the app. This is the same mechanism that CI bots, code review tools, and Dependabot use to access repos.
+
+**Key insight:** The author installing the app is the authorization. mdcolab uses the app's token (not the reviewer's token) to fetch content, and controls access at the application level.
+
+### How It Works (Personal GitHub Accounts)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ SETUP (one-time)                                    │
+│                                                     │
+│ Author installs GitHub App on their repo             │
+│   → App now has installation access token for repo  │
+│   → Author can manage sharing from mdcolab          │
+└─────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────┐
+│ SHARING                                             │
+│                                                     │
+│ 1. Author opens document in mdcolab                 │
+│ 2. Clicks "Share" → Share dialog opens              │
+│ 3. Chooses sharing mode:                            │
+│    • "Specific people" → enters GitHub usernames    │
+│    • "Anyone with the link" → truly anyone, no      │
+│       sign-in required                              │
+│ 4. mdcolab saves config to .mdcolab/sharing.json    │
+│    in the repo (via installation token)             │
+│ 5. Author copies URL and sends to reviewer          │
+└─────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────┐
+│ REVIEWING                                           │
+│                                                     │
+│ 1. Reviewer clicks shared URL                       │
+│ 2. "specific_people" → must sign in with GitHub     │
+│    "anyone_with_link" → no sign-in needed           │
+│ 3. mdcolab reads .mdcolab/sharing.json              │
+│    (using installation token, not reviewer's token) │
+│ 4. Checks: is this reviewer authorized?             │
+│    • "specific_people" → is username in the list?   │
+│    • "anyone_with_link" → yes, anonymous access OK  │
+│ 5. If authorized: fetches content via installation  │
+│    token and serves to reviewer                     │
+│ 6. If not authorized: shows "Request access from    │
+│    @author" UI                                      │
+│                                                     │
+│ Anonymous users can view and comment with a display │
+│ name but edits still require GitHub authentication. │
+└─────────────────────────────────────────────────────┘
+```
+
+### Sharing Modes
+
+| Mode | Who can access | Use case | Available on |
+|---|---|---|---|
+| **Specific people** | Only listed GitHub usernames | Confidential docs, controlled review | All accounts |
+| **Anyone with the link** | Anyone with the URL — no sign-in required. Anonymous users can view and comment with a display name; edits require GitHub auth. | Broad sharing, maximum accessibility | Personal accounts only |
+
+### Sharing Configuration
+
+Sharing settings are stored in `.mdcolab/sharing.json` in the repo itself:
+
+```json
+{
+  "version": 1,
+  "defaultMode": "specific_people",
+  "documents": {
+    "docs/proposal.md": {
+      "mode": "specific_people",
+      "users": ["reviewer1", "reviewer2"],
+      "sharedBy": "charris-msft",
+      "sharedAt": "2026-02-11T01:00:00Z"
+    },
+    "docs/public-spec.md": {
+      "mode": "anyone_with_link",
+      "sharedBy": "charris-msft",
+      "sharedAt": "2026-02-11T01:00:00Z"
+    }
+  }
+}
+```
+
+**Why store in the repo?**
+- Transparent — the repo owner can see and audit who has access
+- Version-controlled — changes to sharing are tracked in git history
+- No external database — sharing config lives with the content
+- Portable — if the repo moves, sharing config moves with it
+
+### Token Flow Change
+
+```
+CURRENT (user-to-server only):
+  Reviewer signs in → reviewer's token → GitHub API → 403 (no access)
+
+PLANNED (installation token for shared docs):
+  Reviewer signs in → mdcolab checks sharing.json (installation token)
+    → authorized? → fetch content (installation token) → serve to reviewer
+    → not authorized? → "Request access" UI
+```
+
+### What This Requires
+
+| Requirement | Details |
+|---|---|
+| GitHub App private key | PEM file generated from App settings, stored in Azure Key Vault |
+| `@octokit/auth-app` package | Generates installation access tokens from App ID + private key |
+| `GITHUB_APP_PRIVATE_KEY` env var | References Key Vault secret |
+| Application-level access control | Check `.mdcolab/sharing.json` before serving content |
+
+### Security Considerations
+
+| Risk | Mitigation |
+|---|---|
+| **Leaked URLs** expose private docs | "Specific people" mode limits access to listed usernames; "anyone_with_link" grants anonymous access so authors should use it only for non-sensitive content |
+| **Installation token is overpowered** | Token scoped to repos where app is installed; sharing config limits which docs are served |
+| **Author could share too broadly** | "Anyone with the link" is opt-in per document; defaults to "specific people" |
+| **Sharing config could be tampered with** | Only users with repo push access can modify `.mdcolab/sharing.json`; changes tracked in git |
+
+### EMU / Enterprise Considerations
+
+For enterprise-managed (EMU) accounts, the sharing model is **more restrictive**:
+
+- **"Anyone with the link" mode is disabled** — EMU users can only use "Specific people" mode, since "anyone_with_link" allows truly anonymous public access
+- **Leaked link = limited blast radius** — even if a URL is forwarded, the recipient must be on the explicit share list AND signed in with GitHub
+- **Enterprise admin controls the app installation** — so they control which repos can be shared at all
+- **Future:** Could restrict sharing to users within the same enterprise/org
+
+This addresses the concern that a leaked URL to an internal doc could expose sensitive content. With "specific people" mode on EMU accounts, a forwarded link is useless unless the recipient was explicitly added to the share list.
+
+---
+
 ## Recommendation for GitHub Team
 
 **The core ask:** We need a way for a third-party app to access repository contents and issues across all of a user's repos, with the user's informed consent, **without** requiring:
@@ -423,26 +577,31 @@ This would give us the best of both worlds: broad repo access (OAuth flow, no in
 
 ---
 
-## Current Workaround
+## Current Implementation & Roadmap
 
-For now, we're using the **GitHub App** approach and accepting the limitations. Possible mitigations:
+**Current (live):** GitHub App with user-to-server tokens + per-repo collaborator model (Option E).
+- ✅ Public repos — any signed-in user can view/comment
+- ✅ Private repos — accessible if the user has direct GitHub access AND app is installed
+- ❌ Private repo sharing with external reviewers — not yet supported (reviewer needs GitHub collaborator access)
 
-1. **"Connect repos" onboarding flow** — After first sign-in, redirect to the GitHub App installation page (`https://github.com/apps/mdcolab1-ai/installations/new`) so users can grant access to their repos.
-2. **Direct URL access** — Users can still access any repo via direct URL (`/d/{owner}/{repo}/{branch}/{path}`) if they have a GitHub token with access. The repos list is just a convenience feature.
-3. **Dual-token approach** — Investigate whether we can use two auth flows: GitHub App for clean permissions on installed repos, plus a minimal OAuth scope (e.g., `public_repo`) just for listing repos.
+**Next (planned):** Installation token sharing model (see "Document Sharing Model" section above).
+- Will enable sharing private repo documents with any GitHub user, without requiring them to be a repo collaborator
+- Author controls access via `.mdcolab/sharing.json` stored in the repo
+- Two modes: "specific people" (all accounts) and "anyone with the link" (personal accounts only; grants anonymous access — no GitHub sign-in needed to view/comment)
+- EMU accounts restricted to "specific people" mode for security
 
 ---
 
 ## Appendix: Token Types Reference
 
-| Token Type | Issued By | Repo Visibility | Permission Model | Installation Required |
-|---|---|---|---|---|
-| OAuth App token (`repo` scope) | OAuth App | All user repos | Coarse (full `repo`) | No |
-| OAuth App token (`public_repo`) | OAuth App | Public repos only | Coarse | No |
-| GitHub App user-to-server token | GitHub App | Installed repos only | Fine-grained | Yes |
-| GitHub App installation token | GitHub App | Installed repos only | Fine-grained | Yes |
-| Fine-grained PAT | User | Selected repos | Fine-grained | N/A (user-managed) |
-| Classic PAT (`repo` scope) | User | All user repos | Coarse | N/A |
+| Token Type | Issued By | Repo Visibility | Permission Model | Installation Required | Used In mdcolab |
+|---|---|---|---|---|---|
+| OAuth App token (`repo` scope) | OAuth App | All user repos | Coarse (full `repo`) | No | ❌ Retired |
+| OAuth App token (`public_repo`) | OAuth App | Public repos only | Coarse | No | ❌ Not used |
+| GitHub App user-to-server token | GitHub App | Installed repos only | Fine-grained | Yes | ✅ Current — user actions |
+| GitHub App installation token | GitHub App | Installed repos only | Fine-grained | Yes | 🔜 Planned — serving shared docs |
+| Fine-grained PAT | User | Selected repos | Fine-grained | N/A (user-managed) | ❌ Not used |
+| Classic PAT (`repo` scope) | User | All user repos | Coarse | N/A | ❌ Not used |
 
 ---
 

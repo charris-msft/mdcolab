@@ -1,22 +1,37 @@
-import { NextResponse } from "next/server";
-import { getOctokit } from "@/lib/github";
+import { NextRequest, NextResponse } from "next/server";
+import { getOctokit, getSession } from "@/lib/github";
 import type { GitHubRepo } from "@/types";
 
-export async function GET(request: Request) {
+export async function GET(req: NextRequest) {
   try {
     const octokit = await getOctokit();
-    const url = new URL(request.url);
-    const page = parseInt(url.searchParams.get("page") ?? "1", 10);
-    const perPage = parseInt(url.searchParams.get("per_page") ?? "30", 10);
+    const session = await getSession();
+    const login = (session as any)?.login as string;
+    const limitParam = req.nextUrl.searchParams.get("limit");
+    const limit = limitParam ? Math.min(parseInt(limitParam, 10), 100) : undefined;
 
-    const { data } = await octokit.repos.listForAuthenticatedUser({
-      sort: "updated",
-      direction: "desc",
-      per_page: perPage,
-      page,
-    });
+    let allRepos;
+    if (limit) {
+      // Fast path: single page, no pagination
+      const { data } = await octokit.repos.listForAuthenticatedUser({
+        sort: "updated",
+        direction: "desc",
+        per_page: limit,
+      });
+      allRepos = data;
+    } else {
+      // Full fetch: paginate through ALL repos
+      allRepos = await octokit.paginate(
+        octokit.repos.listForAuthenticatedUser,
+        {
+          sort: "updated",
+          direction: "desc",
+          per_page: 100,
+        }
+      );
+    }
 
-    const repos: GitHubRepo[] = data.map((r) => ({
+    const repos: GitHubRepo[] = allRepos.map((r) => ({
       id: r.id,
       name: r.name,
       full_name: r.full_name,
@@ -31,6 +46,14 @@ export async function GET(request: Request) {
       language: r.language ?? null,
       stargazers_count: r.stargazers_count,
     }));
+
+    // Sort user-owned repos first, then by updated_at desc
+    repos.sort((a, b) => {
+      const aOwned = a.owner.login.toLowerCase() === login?.toLowerCase() ? 0 : 1;
+      const bOwned = b.owner.login.toLowerCase() === login?.toLowerCase() ? 0 : 1;
+      if (aOwned !== bOwned) return aOwned - bOwned;
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    });
 
     return NextResponse.json(repos);
   } catch (error) {

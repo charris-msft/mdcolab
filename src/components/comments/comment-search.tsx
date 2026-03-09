@@ -20,7 +20,7 @@ export function CommentSearch() {
   const uniqueAuthors = useMemo(() => {
     const authors = new Set<string>();
     threads.forEach((t) =>
-      t.comments.forEach((c) => authors.add(c.author.login))
+      t.comments.forEach((c) => authors.add(c.author.isAnonymous ? (c.author.displayName ?? "Anonymous") : (c.author.login ?? "unknown")))
     );
     return Array.from(authors).sort();
   }, [threads]);
@@ -35,7 +35,7 @@ export function CommentSearch() {
         );
       const matchesAuthor =
         authorFilter.length === 0 ||
-        t.comments.some((c) => authorFilter.includes(c.author.login));
+        t.comments.some((c) => authorFilter.includes(c.author.isAnonymous ? (c.author.displayName ?? "Anonymous") : (c.author.login ?? "unknown")));
       return matchesSearch && matchesAuthor;
     }).length;
   }, [threads, searchQuery, authorFilter]);

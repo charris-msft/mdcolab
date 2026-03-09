@@ -2,10 +2,12 @@
 
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEditorStore } from "@/stores/editor-store";
 import { useCommentStore } from "@/stores/comment-store";
+import { useAIStore } from "@/stores/ai-store";
 import { DocumentEditor } from "@/components/editor";
+import { PresentationView } from "@/components/presentation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -22,10 +24,18 @@ import {
   Check,
   Loader2,
   RefreshCw,
+  Play,
+  Lock,
+  ExternalLink,
+  Info,
+  X,
 } from "lucide-react";
+import { CopilotIcon } from "@/components/icons/copilot-icon";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommentSidebar } from "@/components/comments/comment-sidebar";
+import { ShareDialog } from "@/components/sharing/share-dialog";
+import { AIChatPanel } from "@/components/ai/ai-chat-panel";
 import {
   Sheet,
   SheetContent,
@@ -41,6 +51,7 @@ import { useComments } from "@/hooks/use-comments";
 import { useKeyboardShortcuts, SHORTCUTS } from "@/hooks/use-keyboard-shortcuts";
 import { useCommentNavigation } from "@/hooks/use-comment-navigation";
 import { addRecentDoc } from "@/lib/recent-docs";
+import type { SharingConfig } from "@/lib/sharing-types";
 
 export default function DocumentPage() {
   const params = useParams<{
@@ -56,15 +67,34 @@ export default function DocumentPage() {
   const fileName = params.path[params.path.length - 1];
 
   const [editMode, setEditMode] = useState(false);
-  const { data: session } = useSession();
+  const [presentationMode, setPresentationMode] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const { data: session, status } = useSession();
+  const isAnonymous = status === "unauthenticated";
+  const [guestBannerDismissed, setGuestBannerDismissed] = useState(false);
   const sessionAny = session as unknown as Record<string, unknown> | null;
   const author = {
     login: (sessionAny?.login as string) ?? session?.user?.name ?? "anonymous",
     avatarUrl: session?.user?.image ?? "",
   };
-  const { isDirty, isSaving, setDirty, setSaving, setFilePath, setFileSha, fileSha } =
+  const { isDirty, isSaving, setDirty, setSaving, setFilePath, setFileSha, fileSha, content: editorContent } =
     useEditorStore();
   const { threads, isSidebarOpen, setSidebarOpen } = useCommentStore();
+  const { isOpen: isAIOpen, togglePanel: toggleAIPanel } = useAIStore();
+  const queryClient = useQueryClient();
+
+  // Check Copilot availability
+  const { data: aiHealth } = useQuery({
+    queryKey: ["ai-health"],
+    queryFn: async () => {
+      const res = await fetch("/api/ai/health");
+      if (!res.ok) return { available: false };
+      return res.json() as Promise<{ available: boolean }>;
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: !!session,
+  });
+  const copilotAvailable = aiHealth?.available ?? false;
 
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -103,16 +133,22 @@ export default function DocumentPage() {
       const res = await fetch(
         `/api/file/${owner}/${repo}/${branch}/${filePath}`
       );
+      if (res.status === 403) {
+        const body = await res.json();
+        throw Object.assign(new Error(body.message ?? "No access"), { code: "no_access" });
+      }
       if (!res.ok) throw new Error("Failed to load file");
       return res.json() as Promise<{ content: string; sha: string; path: string }>;
     },
+    refetchInterval: 10000,
   });
 
   // Fetch permissions
   const { data: permData } = useQuery({
-    queryKey: ["permission", owner, repo],
+    queryKey: ["permission", owner, repo, filePath],
     queryFn: async () => {
-      const res = await fetch(`/api/repos/${owner}/${repo}/permission`);
+      const qs = new URLSearchParams({ file: filePath });
+      const res = await fetch(`/api/repos/${owner}/${repo}/permission?${qs}`);
       if (!res.ok) return { permission: "read" as const, canEdit: false, hasIssues: true };
       return res.json() as Promise<{ permission: string; canEdit: boolean; hasIssues: boolean }>;
     },
@@ -121,21 +157,23 @@ export default function DocumentPage() {
   const canEdit = permData?.canEdit ?? false;
   const hasIssues = permData?.hasIssues ?? true;
 
-  // Set file SHA when loaded
+  // Set file SHA when loaded (skip if user has unsaved edits)
   useEffect(() => {
     if (fileData) {
-      setFileSha(fileData.sha);
+      if (!isDirty) {
+        setFileSha(fileData.sha);
+        setDirty(false);
+      }
       setFilePath(filePath);
-      setDirty(false);
       addRecentDoc({
         owner,
         repo,
         branch,
         path: filePath,
         fileName,
-      });
+      }, author.login);
     }
-  }, [fileData, filePath, setFileSha, setFilePath, setDirty, owner, repo, branch, fileName]);
+  }, [fileData, filePath, isDirty, setFileSha, setFilePath, setDirty, owner, repo, branch, fileName, author.login]);
 
   // Save mutation
   const saveMutation = useMutation({
@@ -183,11 +221,6 @@ export default function DocumentPage() {
     [canEdit, fileSha, saveMutation]
   );
 
-  const handleShare = useCallback(() => {
-    navigator.clipboard.writeText(window.location.href);
-    toast.success("Link copied!");
-  }, []);
-
   // Keyboard shortcuts
   const shortcuts = useMemo(
     () => [
@@ -214,12 +247,30 @@ export default function DocumentPage() {
         ...SHORTCUTS.ESCAPE,
         handler: () => setSidebarOpen(false),
       },
+      {
+        ...SHORTCUTS.AI_PANEL,
+        handler: () => { if (copilotAvailable) toggleAIPanel(); },
+      },
+      {
+        key: 'F5',
+        handler: () => setPresentationMode(true),
+        description: 'Present as slideshow',
+      },
     ],
-    [handleSave, setSidebarOpen, isSidebarOpen, nextComment, prevComment]
+    [handleSave, setSidebarOpen, isSidebarOpen, nextComment, prevComment, toggleAIPanel, setPresentationMode, copilotAvailable]
   );
   useKeyboardShortcuts(shortcuts);
 
   const openThreadCount = threads.filter((t) => t.status === "open").length;
+
+  const isNoAccess = !!(fileError && (fileError as Error & { code?: string }).code === "no_access");
+
+  // When access is denied, check if sharing config exists for this document
+  const sharingQuery = useQuery({
+    queryKey: ["sharing", owner, repo],
+    queryFn: () => fetch(`/api/sharing/${owner}/${repo}`).then((r) => r.json()) as Promise<{ sharing: SharingConfig | null }>,
+    enabled: isNoAccess,
+  });
 
   if (fileLoading) {
     return (
@@ -230,12 +281,57 @@ export default function DocumentPage() {
   }
 
   if (fileError || !fileData) {
+    const sharingDoc = sharingQuery.data?.sharing?.documents?.[filePath];
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <p className="text-muted-foreground">Failed to load file</p>
-        <Button asChild variant="outline">
-          <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
-        </Button>
+        {isNoAccess ? (
+          <>
+            <div className="rounded-full bg-amber-500/10 p-3">
+              <Lock className="h-8 w-8 text-amber-500" />
+            </div>
+            {sharingDoc ? (
+              <>
+                <div className="text-center space-y-1">
+                  <p className="font-semibold text-foreground">You don&apos;t have access to this document</p>
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    Ask <span className="font-medium">@{sharingDoc.sharedBy}</span> to share it with you.
+                  </p>
+                </div>
+                <Button asChild variant="outline">
+                  <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="text-center space-y-1">
+                  <p className="font-semibold text-foreground">Private repository</p>
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    You don&apos;t have access to <span className="font-medium">{owner}/{repo}</span> through mdcolab yet.
+                    Grant access to this repo via the GitHub App to view and collaborate on private files.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <Button asChild>
+                    <a href="https://github.com/apps/mdcolab1-ai/installations/new" target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Grant repo access
+                    </a>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
+                  </Button>
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="text-muted-foreground">Failed to load file</p>
+            <Button asChild variant="outline">
+              <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
+            </Button>
+          </>
+        )}
       </div>
     );
   }
@@ -318,16 +414,33 @@ export default function DocumentPage() {
             </div>
           )}
 
-          <Separator orientation="vertical" className="h-6" />
-
-          {/* Share */}
+          {/* Present */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
                 className="gap-1.5"
-                onClick={handleShare}
+                onClick={() => setPresentationMode(true)}
+              >
+                <Play className="h-4 w-4" />
+                Present
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Present as slideshow</TooltipContent>
+          </Tooltip>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* Share */}
+          {!isAnonymous && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setShareDialogOpen(true)}
                 disabled={!hasIssues}
               >
                 <Share2 className="h-4 w-4" />
@@ -340,6 +453,27 @@ export default function DocumentPage() {
                 : "Enable Issues in repo settings to share"}
             </TooltipContent>
           </Tooltip>
+          )}
+
+          {/* AI Assistant */}
+          {session && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`gap-1.5 ${isAIOpen ? "bg-accent text-accent-foreground" : ""}`}
+                onClick={toggleAIPanel}
+                disabled={!copilotAvailable}
+              >
+                <CopilotIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {copilotAvailable ? "Copilot (⌘J)" : "GitHub Copilot subscription required"}
+            </TooltipContent>
+          </Tooltip>
+          )}
 
           {/* Comment count */}
           <Tooltip>
@@ -366,19 +500,21 @@ export default function DocumentPage() {
             </TooltipContent>
           </Tooltip>
 
-          {/* Refresh comments */}
+          {/* Refresh */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => refreshComments()}
-                title="Refresh comments"
+                onClick={() => {
+                  refreshComments();
+                  queryClient.invalidateQueries({ queryKey: ["file", owner, repo, branch, filePath] });
+                }}
               >
                 <RefreshCw className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Refresh comments</TooltipContent>
+            <TooltipContent>Refresh</TooltipContent>
           </Tooltip>
 
           {/* Sidebar toggle */}
@@ -444,10 +580,32 @@ export default function DocumentPage() {
         </div>
       </div>
 
+      {/* Guest banner */}
+      {isAnonymous && !guestBannerDismissed && (
+        <div className="flex items-center justify-between px-4 py-1.5 bg-indigo-500/10 border-b border-indigo-500/20 text-sm">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Info className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+            <span className="text-xs">
+              Viewing as guest —{" "}
+              <a
+                href={`/auth/signin?callbackUrl=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "")}`}
+                className="font-medium text-indigo-400 underline hover:text-indigo-300"
+              >
+                Sign in with GitHub
+              </a>{" "}
+              to connect your identity
+            </span>
+          </div>
+          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-muted-foreground" onClick={() => setGuestBannerDismissed(true)}>
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+      )}
+
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
         {/* Editor */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 flex flex-col overflow-hidden">
           <DocumentEditor
             initialContent={fileData.content}
             editable={canEdit && editMode}
@@ -464,6 +622,11 @@ export default function DocumentPage() {
           </aside>
         )}
 
+        {/* AI Chat Panel */}
+        {isAIOpen && copilotAvailable && (
+          <AIChatPanel documentContent={editorContent || fileData.content} />
+        )}
+
         {isMobile && (
           <Sheet
             open={isSidebarOpen}
@@ -477,6 +640,25 @@ export default function DocumentPage() {
         )}
       </div>
     </div>
+
+    {/* Presentation Mode */}
+    {presentationMode && (
+      <PresentationView
+        markdown={editorContent || fileData.content}
+        onExit={() => setPresentationMode(false)}
+        theme="dark"
+      />
+    )}
+    <ShareDialog
+      open={shareDialogOpen}
+      onOpenChange={setShareDialogOpen}
+      owner={owner}
+      repo={repo}
+      branch={branch}
+      filePath={filePath}
+      canEdit={canEdit}
+      isEmu={(sessionAny?.isEmu as boolean) ?? false}
+    />
     </TooltipProvider>
   );
 }

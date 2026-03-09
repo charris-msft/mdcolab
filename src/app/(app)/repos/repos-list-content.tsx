@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Star, Clock, Search } from "lucide-react";
+import { Star, Clock, Search, ExternalLink, Lock, Globe } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import type { GitHubRepo } from "@/types";
@@ -36,22 +36,35 @@ export function ReposListContent() {
   const { data: repos, isLoading, error } = useQuery<GitHubRepo[]>({
     queryKey: ["repos", "all"],
     queryFn: async () => {
-      const res = await fetch("/api/repos?per_page=100");
+      const res = await fetch("/api/repos");
       if (!res.ok) throw new Error("Failed to fetch repos");
       return res.json();
     },
   });
 
-  const filtered = repos?.filter(
-    (r) =>
-      r.name.toLowerCase().includes(search.toLowerCase()) ||
-      r.description?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = repos?.filter((r) => {
+    const q = search.toLowerCase();
+    return (
+      r.full_name.toLowerCase().includes(q) ||
+      r.name.toLowerCase().includes(q) ||
+      r.owner.login.toLowerCase().includes(q) ||
+      r.description?.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Repositories</h1>
+        <a
+          href="https://github.com/apps/mdcolab1-ai/installations/new"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Connect private repos
+        </a>
       </div>
 
       {/* Search */}
@@ -91,27 +104,40 @@ export function ReposListContent() {
             </p>
           )}
           {filtered.map((repo) => (
-            <Link
+            <div
               key={repo.id}
-              href={`/repos/${repo.owner.login}/${repo.name}`}
-              className="group flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-primary/30 hover:bg-card/80"
+              className="group relative flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-primary/30 hover:bg-card/80"
             >
+              <a
+                href={`https://github.com/${repo.owner.login}/${repo.name}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-foreground z-10"
+                title="Open on GitHub"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+              <Link
+                href={`/repos/${repo.owner.login}/${repo.name}`}
+                className="flex items-center justify-between min-w-0 flex-1"
+              >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
+                  {repo.private ? (
+                    <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
+                  ) : (
+                    <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
+                  )}
                   <span className="font-semibold text-foreground group-hover:text-primary">
                     {repo.owner.login}/{repo.name}
                   </span>
-                  {repo.private && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      Private
-                    </span>
-                  )}
                 </div>
                 <p className="mt-0.5 truncate text-sm text-muted-foreground">
                   {repo.description ?? "No description"}
                 </p>
               </div>
-              <div className="ml-4 flex shrink-0 items-center gap-4 text-xs text-muted-foreground">
+              <div className="ml-4 flex shrink-0 items-center gap-4 text-xs text-muted-foreground mr-6">
                 {repo.language && (
                   <span className="flex items-center gap-1">
                     <span
@@ -131,7 +157,8 @@ export function ReposListContent() {
                   {formatRelativeTime(repo.updated_at)}
                 </span>
               </div>
-            </Link>
+              </Link>
+            </div>
           ))}
         </div>
       )}

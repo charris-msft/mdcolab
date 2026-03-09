@@ -5,3 +5,9 @@ node_modules
 .env*
 .azure
 infra
+test-results
+vscode-mdcolab
+e2e
+playwright.config.ts
+vitest.config.ts
+playwright-report

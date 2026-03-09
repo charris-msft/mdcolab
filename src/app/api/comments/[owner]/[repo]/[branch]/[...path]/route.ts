@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { getOctokit } from "@/lib/github";
+import { auth } from "@/lib/auth";
+import { isAppConfigured, getInstallationOctokit } from "@/lib/github-app";
+import { checkSharingAccess } from "@/lib/sharing-utils";
 import type { CommentThread, CommentAnchor, Comment } from "@/types";
 
 const LABEL = "mdcolab";
@@ -12,10 +15,12 @@ const LABEL_COLOR = "7B61FF";
 interface IssueMetadata {
   file: string;
   anchor: CommentAnchor;
+  anonymousAuthor?: { displayName: string };
+  proxyAuthor?: { login: string; avatarUrl: string };
 }
 
-function buildIssueBody(anchor: CommentAnchor, commentBody: string, filePath: string): string {
-  const meta: IssueMetadata = { file: filePath, anchor };
+function buildIssueBody(anchor: CommentAnchor, commentBody: string, filePath: string, anonymousAuthor?: { displayName: string }, proxyAuthor?: { login: string; avatarUrl: string }): string {
+  const meta: IssueMetadata = { file: filePath, anchor, ...(anonymousAuthor && { anonymousAuthor }), ...(proxyAuthor && { proxyAuthor }) };
   return `<!-- mdcolab-metadata\n${JSON.stringify(meta, null, 2)}\n-->\n\n${commentBody}`;
 }
 
@@ -31,6 +36,37 @@ function parseMetadata(body: string): IssueMetadata | null {
 
 function extractCommentBody(body: string): string {
   return body.replace(/<!--\s*mdcolab-metadata\s*\n[\s\S]*?\n\s*-->\s*\n*/, "").trim();
+}
+
+// Anonymous/proxy author metadata embedded in reply comment bodies
+const ANON_TAG = "mdcolab-anon";
+const PROXY_TAG = "mdcolab-proxy";
+
+function buildAnonCommentBody(body: string, displayName: string): string {
+  return `<!-- ${ANON_TAG} ${JSON.stringify({ displayName })} -->\n\n${body}`;
+}
+
+function buildProxyCommentBody(body: string, login: string, avatarUrl: string): string {
+  return `<!-- ${PROXY_TAG} ${JSON.stringify({ login, avatarUrl })} -->\n\n${body}`;
+}
+
+function parseAnonAuthor(body: string): { displayName: string } | null {
+  const match = body.match(new RegExp(`<!--\\s*${ANON_TAG}\\s+(\\{.*?\\})\\s*-->`));
+  if (!match) return null;
+  try { return JSON.parse(match[1]); } catch { return null; }
+}
+
+function parseProxyAuthor(body: string): { login: string; avatarUrl: string } | null {
+  const match = body.match(new RegExp(`<!--\\s*${PROXY_TAG}\\s+(\\{.*?\\})\\s*-->`));
+  if (!match) return null;
+  try { return JSON.parse(match[1]); } catch { return null; }
+}
+
+function stripAnonAuthor(body: string): string {
+  return body
+    .replace(new RegExp(`<!--\\s*${ANON_TAG}\\s+\\{.*?\\}\\s*-->\\s*\\n*`), "")
+    .replace(new RegExp(`<!--\\s*${PROXY_TAG}\\s+\\{.*?\\}\\s*-->\\s*\\n*`), "")
+    .trim();
 }
 
 interface GitHubUser {
@@ -56,14 +92,53 @@ interface GitHubComment {
   updated_at: string;
 }
 
-function toComment(src: { id: number; body: string; user: GitHubUser | null; created_at: string; updated_at: string }): Comment {
+function toComment(src: { id: number; body: string; user: GitHubUser | null; created_at: string; updated_at: string }, anonOverride?: { displayName: string }, proxyOverride?: { login: string; avatarUrl: string }): Comment {
+  // Check for inline anonymous/proxy author metadata in the body (for replies)
+  const inlineAnon = !anonOverride ? parseAnonAuthor(src.body) : null;
+  const inlineProxy = !proxyOverride && !inlineAnon ? parseProxyAuthor(src.body) : null;
+  const anon = anonOverride ?? inlineAnon;
+  const proxy = proxyOverride ?? inlineProxy;
+  const cleanBody = (inlineAnon || inlineProxy) ? stripAnonAuthor(src.body) : src.body;
+
+  if (anon) {
+    return {
+      id: String(src.id),
+      author: {
+        login: null,
+        displayName: anon.displayName,
+        avatarUrl: null,
+        isAnonymous: true,
+      },
+      body: cleanBody,
+      mentions: [],
+      suggestedEdit: null,
+      createdAt: src.created_at,
+      updatedAt: src.updated_at,
+    };
+  }
+
+  if (proxy) {
+    return {
+      id: String(src.id),
+      author: {
+        login: proxy.login,
+        avatarUrl: proxy.avatarUrl,
+      },
+      body: cleanBody,
+      mentions: [],
+      suggestedEdit: null,
+      createdAt: src.created_at,
+      updatedAt: src.updated_at,
+    };
+  }
+
   return {
     id: String(src.id),
     author: {
       login: src.user?.login ?? "unknown",
       avatarUrl: src.user?.avatar_url ?? "",
     },
-    body: src.body,
+    body: cleanBody,
     mentions: [],
     suggestedEdit: null,
     createdAt: src.created_at,
@@ -84,7 +159,7 @@ function issueToThread(issue: GitHubIssue, issueComments: GitHubComment[]): Comm
       user: issue.user,
       created_at: issue.created_at,
       updated_at: issue.updated_at,
-    }),
+    }, meta.anonymousAuthor, meta.proxyAuthor),
     ...issueComments.map((c) =>
       toComment({
         id: c.id,
@@ -239,7 +314,61 @@ export async function GET(
 
     return NextResponse.json({ threads });
   } catch (error) {
-    if (error instanceof Error && error.message === "Not authenticated") {
+    const isNotAuth = error instanceof Error && error.message === "Not authenticated";
+    const errStatus = (error as { status?: number })?.status;
+    const isAccessError = errStatus === 403 || errStatus === 404;
+
+    if ((isNotAuth || isAccessError) && isAppConfigured()) {
+      try {
+        const session = await auth().catch(() => null);
+        const login = (session as any)?.login ?? null;
+        const { owner, repo, path: pathSegments } = await params;
+        const filePath = pathSegments.join("/");
+        const installationOctokit = await getInstallationOctokit(owner, repo);
+        const { authorized } = await checkSharingAccess(installationOctokit, owner, repo, filePath, login);
+        if (authorized) {
+          let issues: GitHubIssue[] = [];
+          const pathLabel = `path:${filePath}`;
+          try {
+            issues = await fetchIssuesWithLabels(installationOctokit, owner, repo, `${LABEL},${pathLabel}`);
+          } catch { /* ignore */ }
+          if (issues.length === 0) {
+            try {
+              const allIssues = await fetchIssuesWithLabels(installationOctokit, owner, repo, LABEL);
+              issues = allIssues.filter((issue) => {
+                const meta = parseMetadata(issue.body ?? "");
+                return meta?.file === filePath;
+              });
+            } catch { /* ignore */ }
+          }
+          const seen = new Set<number>();
+          issues = issues.filter((issue) => {
+            if (seen.has(issue.number)) return false;
+            seen.add(issue.number);
+            return true;
+          });
+          const threads: CommentThread[] = [];
+          await Promise.all(
+            issues.map(async (issue) => {
+              const { data: comments } = await installationOctokit.issues.listComments({
+                owner,
+                repo,
+                issue_number: issue.number,
+                per_page: 100,
+              });
+              const thread = issueToThread(issue, comments as unknown as GitHubComment[]);
+              if (thread) threads.push(thread);
+            })
+          );
+          threads.sort((a, b) => a.comments[0]?.createdAt.localeCompare(b.comments[0]?.createdAt ?? "") ?? 0);
+          return NextResponse.json({ threads });
+        }
+      } catch {
+        // Fall through to error
+      }
+    }
+
+    if (isNotAuth) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
     console.error("GET comments error:", error);
@@ -255,11 +384,90 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ owner: string; repo: string; branch: string; path: string[] }> }
 ) {
+  const body = await request.json();
   try {
     const { owner, repo, path: pathSegments } = await params;
     const filePath = pathSegments.join("/");
-    const octokit = await getOctokit();
-    const body = await request.json();
+    let octokit;
+    try {
+      octokit = await getOctokit();
+    } catch (authErr) {
+      // Anonymous user — try installation token fallback
+      if (isAppConfigured()) {
+        try {
+          const session = await auth().catch(() => null);
+          const login = (session as any)?.login ?? null;
+          const isAnonymous = !login;
+          const installationOctokit = await getInstallationOctokit(owner, repo);
+          const { authorized } = await checkSharingAccess(installationOctokit, owner, repo, filePath, login);
+          if (authorized) {
+            const action: string = body.action;
+            const displayName: string = body.displayName || "Anonymous";
+
+            if (action === "create") {
+              const anchor: CommentAnchor = body.anchor;
+              const commentBody: string = body.body;
+              const labels: string[] = [];
+              const fileLabel = `file:${filePath.split("/").pop() ?? filePath}`;
+              const pathLabel = `path:${filePath}`;
+              if (await ensureLabelSafe(installationOctokit, owner, repo, LABEL, LABEL_COLOR, "mdcolab comment threads")) labels.push(LABEL);
+              if (await ensureLabelSafe(installationOctokit, owner, repo, fileLabel, "0E8A16", `mdcolab comments for ${filePath}`)) labels.push(fileLabel);
+              if (await ensureLabelSafe(installationOctokit, owner, repo, pathLabel, "0E8A16", `mdcolab path ${filePath}`)) labels.push(pathLabel);
+              const selectedText = anchor.selectedText || "General comment";
+              const truncated = selectedText.length > 50 ? selectedText.slice(0, 50) + "…" : selectedText;
+              const title = `[mdcolab] "${truncated}" — ${filePath}`;
+              const anonAuthor = isAnonymous ? { displayName } : undefined;
+              const { data: issue } = await installationOctokit.issues.create({
+                owner,
+                repo,
+                title,
+                body: buildIssueBody(anchor, commentBody, filePath, anonAuthor),
+                labels: labels.length > 0 ? labels : undefined,
+              });
+              const thread: CommentThread = {
+                id: String(issue.number),
+                status: "open",
+                anchor,
+                comments: [
+                  toComment({ id: issue.id, body: commentBody, user: issue.user as GitHubUser | null, created_at: issue.created_at, updated_at: issue.updated_at }, anonAuthor),
+                ],
+              };
+              return NextResponse.json({ thread });
+            }
+
+            if (action === "reply") {
+              const issueNumber: number = body.issueNumber;
+              const commentBody: string = body.body;
+              const finalBody = isAnonymous ? buildAnonCommentBody(commentBody, displayName) : commentBody;
+              const { data: comment } = await installationOctokit.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: finalBody,
+              });
+              const anonOverride = isAnonymous ? { displayName } : undefined;
+              return NextResponse.json({
+                comment: toComment({ id: comment.id, body: commentBody, user: comment.user as GitHubUser | null, created_at: comment.created_at, updated_at: comment.updated_at }, anonOverride),
+              });
+            }
+
+            if (action === "resolve" || action === "reopen") {
+              const issueNumber: number = body.issueNumber;
+              await installationOctokit.issues.update({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                state: action === "resolve" ? "closed" : "open",
+              });
+              return NextResponse.json({ ok: true });
+            }
+          }
+        } catch (fallbackErr) {
+          console.error("POST anonymous comment fallback error:", fallbackErr);
+        }
+      }
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
 
     const action: string = body.action; // "create" | "reply" | "resolve" | "reopen"
 
@@ -347,13 +555,101 @@ export async function POST(
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
-    if (error instanceof Error && error.message === "Not authenticated") {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
+    const isNotAuth = error instanceof Error && error.message === "Not authenticated";
     if (typeof error === "object" && error !== null && "status" in error && (error as { status: number }).status === 410) {
       return NextResponse.json({
         error: "Issues are disabled for this repository. Enable them in Settings → Features → Issues.",
       }, { status: 410 });
+    }
+    const errStatus = (error as { status?: number })?.status;
+    const isAccessError = errStatus === 403 || errStatus === 404;
+
+    if ((isNotAuth || isAccessError) && isAppConfigured()) {
+      try {
+        const session = await auth().catch(() => null);
+        const login = (session as any)?.login ?? null;
+        const avatarUrl = (session as any)?.user?.image ?? "";
+        const isAnonymous = !login;
+        const { owner, repo, path: pathSegments } = await params;
+        const filePath = pathSegments.join("/");
+        const installationOctokit = await getInstallationOctokit(owner, repo);
+        const { authorized } = await checkSharingAccess(installationOctokit, owner, repo, filePath, login);
+        if (authorized) {
+          const action: string = body.action;
+          const displayName: string = body.displayName || "Anonymous";
+          const proxyAuthor = !isAnonymous ? { login, avatarUrl } : undefined;
+
+          if (action === "create") {
+            const anchor: CommentAnchor = body.anchor;
+            const commentBody: string = body.body;
+            const labels: string[] = [];
+            const fileLabel = `file:${filePath.split("/").pop() ?? filePath}`;
+            const pathLabel = `path:${filePath}`;
+            if (await ensureLabelSafe(installationOctokit, owner, repo, LABEL, LABEL_COLOR, "mdcolab comment threads")) labels.push(LABEL);
+            if (await ensureLabelSafe(installationOctokit, owner, repo, fileLabel, "0E8A16", `mdcolab comments for ${filePath}`)) labels.push(fileLabel);
+            if (await ensureLabelSafe(installationOctokit, owner, repo, pathLabel, "0E8A16", `mdcolab path ${filePath}`)) labels.push(pathLabel);
+            const selectedText = anchor.selectedText || "General comment";
+            const truncated = selectedText.length > 50 ? selectedText.slice(0, 50) + "…" : selectedText;
+            const title = `[mdcolab] "${truncated}" — ${filePath}`;
+            const anonAuthor = isAnonymous ? { displayName } : undefined;
+            const { data: issue } = await installationOctokit.issues.create({
+              owner,
+              repo,
+              title,
+              body: buildIssueBody(anchor, commentBody, filePath, anonAuthor, proxyAuthor),
+              labels: labels.length > 0 ? labels : undefined,
+            });
+            const thread: CommentThread = {
+              id: String(issue.number),
+              status: "open",
+              anchor,
+              comments: [
+                toComment({ id: issue.id, body: commentBody, user: issue.user as GitHubUser | null, created_at: issue.created_at, updated_at: issue.updated_at }, anonAuthor, proxyAuthor),
+              ],
+            };
+            return NextResponse.json({ thread });
+          }
+
+          if (action === "reply") {
+            const issueNumber: number = body.issueNumber;
+            const commentBody: string = body.body;
+            let finalBody: string;
+            if (isAnonymous) {
+              finalBody = buildAnonCommentBody(commentBody, displayName);
+            } else {
+              finalBody = buildProxyCommentBody(commentBody, login, avatarUrl);
+            }
+            const { data: comment } = await installationOctokit.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body: finalBody,
+            });
+            const anonOverride = isAnonymous ? { displayName } : undefined;
+            return NextResponse.json({
+              comment: toComment({ id: comment.id, body: commentBody, user: comment.user as GitHubUser | null, created_at: comment.created_at, updated_at: comment.updated_at }, anonOverride, proxyAuthor),
+            });
+          }
+
+          if (action === "resolve" || action === "reopen") {
+            const issueNumber: number = body.issueNumber;
+            await installationOctokit.issues.update({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              state: action === "resolve" ? "closed" : "open",
+            });
+            return NextResponse.json({ ok: true });
+          }
+        }
+      } catch (fallbackErr) {
+        console.error("POST comments fallback error:", fallbackErr);
+        // Fall through to error
+      }
+    }
+
+    if (isNotAuth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
     console.error("POST comments error:", error);
     return NextResponse.json({ error: "Failed to save comment" }, { status: 500 });

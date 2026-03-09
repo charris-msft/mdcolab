@@ -45,7 +45,7 @@ export function DocumentEditor({
   className,
   author,
 }: DocumentEditorProps) {
-  const { isDirty, setDirty, setContent, setEditable } = useEditorStore();
+  const { isDirty, setDirty, setContent, setEditable, setEditor, setSelectedText } = useEditorStore();
   const editorInteracted = useRef(false);
 
   const editor = useEditor({
@@ -105,6 +105,15 @@ export function DocumentEditor({
           "prose-editor outline-none min-h-[500px] px-4 py-8 mx-auto max-w-[720px]",
       },
     },
+    onCreate: ({ editor }) => {
+      // Populate store with the editor's serialized markdown on first load
+      // so AI context and Apply Edit use the same source
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const markdown = (editor.storage as any).markdown?.getMarkdown?.() as string;
+      if (markdown) {
+        setContent(markdown);
+      }
+    },
     onUpdate: ({ editor }) => {
       // Skip marking dirty if editor hasn't been interacted with yet
       if (!editor.isFocused && !editorInteracted.current) { return; }
@@ -113,6 +122,11 @@ export function DocumentEditor({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const markdown = (editor.storage as any).markdown.getMarkdown() as string;
       setContent(markdown);
+    },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection;
+      const text = from !== to ? editor.state.doc.textBetween(from, to, '\n') : '';
+      setSelectedText(text);
     },
   });
 
@@ -125,6 +139,14 @@ export function DocumentEditor({
 
   // Apply comment marks and handle click-to-scroll
   useCommentAnchors(editor);
+
+  // Expose editor instance to store for cross-component access
+  useEffect(() => {
+    if (editor) {
+      setEditor(editor);
+    }
+    return () => setEditor(null);
+  }, [editor, setEditor]);
 
   // Sync editable state
   useEffect(() => {
@@ -171,7 +193,9 @@ export function DocumentEditor({
       {editable && <BubbleToolbar editor={editor} editable={editable} onCreateComment={handleCreateComment} />}
       {!editable && <ReviewSelectionToolbar editor={editor} onCreateComment={handleCreateComment} />}
       <CodeBlockComponent editor={editor} />
-      <EditorContent editor={editor} />
+      <div className="flex-1 overflow-y-auto">
+        <EditorContent editor={editor} />
+      </div>
     </div>
   );
 }

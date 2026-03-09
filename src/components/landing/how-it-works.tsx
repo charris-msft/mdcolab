@@ -7,7 +7,7 @@ const steps = [
   {
     icon: FileText,
     title: "Write in Markdown",
-    description: "Use a rich WYSIWYG editor or write raw markdown — your docs live in your GitHub repo, version-controlled.",
+    description: "Use a rich WYSIWYG editor with built-in Copilot AI — rewrite, improve, or expand content. Your docs live in your GitHub repo, version-controlled.",
   },
   {
     icon: Share2,

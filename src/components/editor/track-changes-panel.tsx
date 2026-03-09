@@ -77,7 +77,7 @@ export function TrackChangesPanel() {
             className="rounded-lg border border-border bg-card p-3 space-y-2"
           >
             <div className="text-xs text-muted-foreground">
-              @{comment.author.login} suggested:
+              {comment.author.isAnonymous ? (comment.author.displayName ?? "Anonymous") : `@${comment.author.login}`} suggested:
             </div>
             <div className="space-y-1">
               <div className="text-sm line-through text-red-400 bg-red-500/10 px-2 py-1 rounded">

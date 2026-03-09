@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { AppNavbar } from "@/components/layout/app-navbar";
 
@@ -10,7 +11,12 @@ export default async function AppLayout({
   const session = await auth();
 
   if (!session?.user) {
-    redirect("/api/auth/signin");
+    // Allow anonymous access to /d/* routes — the page component handles access checks
+    const headersList = await headers();
+    const pathname = headersList.get("x-pathname") ?? headersList.get("x-invoke-path") ?? "";
+    if (!pathname.startsWith("/d/")) {
+      redirect("/api/auth/signin");
+    }
   }
 
   return (

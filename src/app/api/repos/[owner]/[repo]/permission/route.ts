@@ -1,48 +1,51 @@
 import { NextResponse } from "next/server";
 import { getOctokit } from "@/lib/github";
-import { auth } from "@/lib/auth";
+import { isAppConfigured, getInstallationOctokit } from "@/lib/github-app";
+import { checkAnySharingAccess, checkSharingAccess } from "@/lib/sharing-utils";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ owner: string; repo: string }> }
 ) {
   try {
     const { owner, repo } = await params;
-    const session = await auth();
-    const sessionAny = session as unknown as Record<string, unknown>;
-    let username = sessionAny?.login as string | undefined;
-
-    if (!username) {
-      // Fall back: get login from GitHub API
-      try {
-        const octokit = await getOctokit();
-        const { data: user } = await octokit.users.getAuthenticated();
-        username = user.login;
-      } catch {
-        return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true });
+    const url = new URL(request.url);
+    const filePath = url.searchParams.get("file");
+    let octokit;
+    try {
+      octokit = await getOctokit();
+    } catch {
+      // Anonymous user — check if repo has shared docs
+      if (isAppConfigured()) {
+        try {
+          const installationOctokit = await getInstallationOctokit(owner, repo);
+          // If a specific file is requested, check its sharing config
+          if (filePath) {
+            const { authorized, allowEditing } = await checkSharingAccess(installationOctokit, owner, repo, filePath, null);
+            if (authorized) {
+              return NextResponse.json({ permission: allowEditing ? "write" : "read", canEdit: allowEditing, hasIssues: true, anonymous: true });
+            }
+          }
+          // Fallback: check if ANY doc is shared
+          const { authorized } = await checkAnySharingAccess(installationOctokit, owner, repo, null);
+          if (authorized) {
+            return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true, anonymous: true });
+          }
+        } catch {
+          // Fall through to default
+        }
       }
+      return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true });
     }
-
-    if (!username) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    const octokit = await getOctokit();
 
     try {
-      const [{ data }, { data: repoData }] = await Promise.all([
-        octokit.repos.getCollaboratorPermissionLevel({
-          owner,
-          repo,
-          username,
-        }),
-        octokit.repos.get({ owner, repo }),
-      ]);
-
-      const permission = data.permission as "admin" | "write" | "read" | "none";
+      const { data: repoData } = await octokit.repos.get({ owner, repo });
+      const perms = repoData.permissions;
+      const canEdit = perms?.push === true || perms?.admin === true;
+      const permission = perms?.admin ? "admin" : perms?.push ? "write" : "read";
       return NextResponse.json({
         permission,
-        canEdit: permission === "admin" || permission === "write",
+        canEdit,
         hasIssues: repoData.has_issues,
       });
     } catch {
