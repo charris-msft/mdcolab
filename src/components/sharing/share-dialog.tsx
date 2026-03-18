@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Link2, Lock, Globe, Loader2, X, UserPlus, Trash2, Pencil } from "lucide-react";
+import { Link2, Lock, Globe, Loader2, X, UserPlus, Trash2, Pencil, CalendarClock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,21 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import type { SharingConfig } from "@/lib/sharing-types";
 
 type SharingMode = "specific_people" | "anyone_with_link";
+
+const EXPIRATION_OPTIONS = [
+  { label: "1 day", days: 1 },
+  { label: "7 days", days: 7 },
+  { label: "30 days", days: 30 },
+  { label: "90 days", days: 90 },
+  { label: "No expiration", days: 0 },
+] as const;
+
+function computeExpiresAt(days: number): string | undefined {
+  if (days <= 0) return undefined;
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString();
+}
 
 interface SharingResponse {
   sharing: SharingConfig | null;
@@ -51,6 +66,7 @@ export function ShareDialog({
   const queryClient = useQueryClient();
   const [usernameInput, setUsernameInput] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
+  const [expirationDays, setExpirationDays] = useState(7);
 
   const { data: sharingData, isLoading } = useQuery<SharingResponse>({
     queryKey: ["sharing", owner, repo],
@@ -78,6 +94,7 @@ export function ShareDialog({
       users: string[];
       sha: string;
       allowEditing?: boolean;
+      expiresAt?: string;
     }) => {
       const res = await fetch(`/api/sharing/${owner}/${repo}`, {
         method: "PUT",
@@ -104,9 +121,9 @@ export function ShareDialog({
 
   const setMode = useCallback(
     (newMode: SharingMode) => {
-      updateSharing({ path: filePath, mode: newMode, users, sha, allowEditing });
+      updateSharing({ path: filePath, mode: newMode, users, sha, allowEditing, expiresAt: computeExpiresAt(expirationDays) });
     },
-    [updateSharing, filePath, users, sha, allowEditing]
+    [updateSharing, filePath, users, sha, allowEditing, expirationDays]
   );
 
   const addUser = useCallback(() => {
@@ -122,9 +139,10 @@ export function ShareDialog({
       users: [...users, username],
       sha,
       allowEditing,
+      expiresAt: computeExpiresAt(expirationDays),
     });
     setUsernameInput("");
-  }, [usernameInput, users, updateSharing, filePath, mode, sha, allowEditing]);
+  }, [usernameInput, users, updateSharing, filePath, mode, sha, allowEditing, expirationDays]);
 
   const removeUser = useCallback(
     (username: string) => {
@@ -134,9 +152,10 @@ export function ShareDialog({
         users: users.filter((u) => u !== username),
         sha,
         allowEditing,
+        expiresAt: computeExpiresAt(expirationDays),
       });
     },
-    [users, updateSharing, filePath, mode, sha, allowEditing]
+    [users, updateSharing, filePath, mode, sha, allowEditing, expirationDays]
   );
 
   const { mutate: stopSharing, isPending: isUnsharing } = useMutation({
@@ -184,8 +203,8 @@ export function ShareDialog({
   );
 
   const toggleEditing = useCallback(() => {
-    updateSharing({ path: filePath, mode, users, sha, allowEditing: !allowEditing });
-  }, [updateSharing, filePath, mode, users, sha, allowEditing]);
+    updateSharing({ path: filePath, mode, users, sha, allowEditing: !allowEditing, expiresAt: computeExpiresAt(expirationDays) });
+  }, [updateSharing, filePath, mode, users, sha, allowEditing, expirationDays]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -269,6 +288,36 @@ export function ShareDialog({
                 </div>
               </button>
             )}
+
+            {/* Expiration picker */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <CalendarClock className="size-4 text-muted-foreground" />
+                Expires after
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {EXPIRATION_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.days}
+                    type="button"
+                    disabled={isAnyPending}
+                    onClick={() => setExpirationDays(opt.days)}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                      expirationDays === opt.days
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
+                    } ${isAnyPending ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {doc?.expiresAt && (
+                <p className="text-xs text-muted-foreground">
+                  Current expiration: {new Date(doc.expiresAt).toLocaleDateString()}
+                </p>
+              )}
+            </div>
 
             {/* User list section */}
             {mode === "specific_people" && (

@@ -30,6 +30,11 @@ export async function checkSharingAccess(
       return { authorized: false, allowEditing: false, sharing };
     }
 
+    // Reject expired shares
+    if (doc.expiresAt && new Date(doc.expiresAt).getTime() <= Date.now()) {
+      return { authorized: false, allowEditing: false, sharing };
+    }
+
     const allowEditing = doc.allowEditing === true;
 
     if (doc.mode === "anyone_with_link") {
@@ -75,6 +80,10 @@ export async function checkAnySharingAccess(
     const sharing: SharingConfig = JSON.parse(content);
 
     for (const doc of Object.values(sharing.documents)) {
+      // Skip expired shares
+      if (doc.expiresAt && new Date(doc.expiresAt).getTime() <= Date.now()) {
+        continue;
+      }
       if (doc.mode === "anyone_with_link") {
         return { authorized: true, sharing };
       }

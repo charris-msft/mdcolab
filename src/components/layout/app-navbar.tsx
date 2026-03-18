@@ -11,6 +11,7 @@ import { HelpButton } from "@/components/layout/help-dialog";
 const navLinks = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/repos", label: "Repos" },
+  { href: "/shared", label: "Shared" },
 ];
 
 export function AppNavbar() {

@@ -4,6 +4,7 @@ export interface SharingDocument {
   allowEditing?: boolean;
   sharedBy: string;
   sharedAt: string;
+  expiresAt?: string;
 }
 
 export interface SharingConfig {

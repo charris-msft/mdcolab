@@ -92,12 +92,13 @@ export async function PUT(
   const { owner, repo } = await params;
 
   const body = await request.json();
-  const { path, mode, users, sha: existingSha, allowEditing } = body as {
+  const { path, mode, users, sha: existingSha, allowEditing, expiresAt } = body as {
     path: string;
     mode: SharingDocument["mode"];
     users?: string[];
     sha?: string;
     allowEditing?: boolean;
+    expiresAt?: string;
   };
 
   if (!path || !mode) {
@@ -175,6 +176,7 @@ export async function PUT(
     mode,
     users: mode === "specific_people" ? users : undefined,
     allowEditing: allowEditing === true ? true : undefined,
+    expiresAt: expiresAt || undefined,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     sharedBy: (session as any)?.login as string,
     sharedAt: new Date().toISOString(),
