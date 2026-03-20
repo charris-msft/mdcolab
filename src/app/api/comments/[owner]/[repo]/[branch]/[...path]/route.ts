@@ -239,8 +239,11 @@ export async function GET(
     const filePath = pathSegments.join("/");
     const octokit = await getOctokit();
 
-    // Strategy: Try path-specific label first, fall back to mdcolab-only label, then search
+    // Strategy: Try path-specific label first, fall back to mdcolab-only label, then search.
+    // Track whether any attempt threw an access error so we can fall through to the
+    // sharing-access path instead of returning an empty list.
     let issues: GitHubIssue[] = [];
+    let hadAccessError = false;
     const pathLabel = `path:${filePath}`;
 
     // Attempt 1: Filter by both mdcolab + path label (most efficient)
@@ -249,10 +252,12 @@ export async function GET(
       console.log(`[comments GET] Attempt 1 (path label): found ${issues.length} issues for ${filePath}`);
     } catch (err) {
       console.log(`[comments GET] Attempt 1 failed:`, err instanceof Error ? err.message : err);
+      const status = (err as { status?: number })?.status;
+      if (status === 403 || status === 404) hadAccessError = true;
     }
 
     // Attempt 2: If no results, try mdcolab label only and filter by metadata
-    if (issues.length === 0) {
+    if (issues.length === 0 && !hadAccessError) {
       try {
         const allMdcolabIssues = await fetchIssuesWithLabels(octokit, owner, repo, LABEL);
         console.log(`[comments GET] Attempt 2 (mdcolab label): found ${allMdcolabIssues.length} total mdcolab issues`);
@@ -263,11 +268,13 @@ export async function GET(
         console.log(`[comments GET] Attempt 2: ${issues.length} issues matched file ${filePath}`);
       } catch (err) {
         console.log(`[comments GET] Attempt 2 failed:`, err instanceof Error ? err.message : err);
+        const status = (err as { status?: number })?.status;
+        if (status === 403 || status === 404) hadAccessError = true;
       }
     }
 
     // Attempt 3: If still nothing, search all issues by title pattern
-    if (issues.length === 0) {
+    if (issues.length === 0 && !hadAccessError) {
       try {
         const searchQuery = `repo:${owner}/${repo} is:issue "[mdcolab]" in:title`;
         const { data } = await octokit.search.issuesAndPullRequests({
@@ -282,7 +289,15 @@ export async function GET(
         console.log(`[comments GET] Attempt 3: ${issues.length} issues matched file ${filePath}`);
       } catch (err) {
         console.log(`[comments GET] Attempt 3 failed:`, err instanceof Error ? err.message : err);
+        const status = (err as { status?: number })?.status;
+        if (status === 403 || status === 404) hadAccessError = true;
       }
+    }
+
+    // If user's token couldn't access the repo, fall through to the sharing-access
+    // path so authenticated users without repo access can still see all comments.
+    if (hadAccessError && issues.length === 0) {
+      throw Object.assign(new Error("Repo access denied"), { status: 403 });
     }
 
     console.log(`[comments GET] Final: ${issues.length} issues for ${owner}/${repo}/${filePath}`);
