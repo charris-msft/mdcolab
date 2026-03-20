@@ -183,14 +183,17 @@ export function ShareDialog({
 
   const copyLink = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      const url = window.location.href;
+      const fileName = filePath.split("/").pop() ?? filePath;
+      const markdownLink = `[${fileName}](${url})`;
+      await navigator.clipboard.writeText(markdownLink);
       setLinkCopied(true);
       toast.success("Link copied to clipboard");
       setTimeout(() => setLinkCopied(false), 2000);
     } catch {
       toast.error("Failed to copy link");
     }
-  }, []);
+  }, [filePath]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
