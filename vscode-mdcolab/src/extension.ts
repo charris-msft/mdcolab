@@ -133,8 +133,106 @@ export async function activate(context: vscode.ExtensionContext) {
       const config = vscode.workspace.getConfiguration('mdcolab');
       const baseUrl = config.get<string>('webAppUrl', 'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io');
       const url = buildMdcolabUrl(currentRepoInfo, currentFilePath, baseUrl);
-      await vscode.env.clipboard.writeText(url);
+      const fileName = currentFilePath.split('/').pop() ?? currentFilePath;
+      const markdownLink = `[${fileName}](${url})`;
+      await vscode.env.clipboard.writeText(markdownLink);
       vscode.window.showInformationMessage('mdcolab link copied to clipboard!');
+    })
+  );
+
+  // Share with mdcolab (explorer context menu)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('mdcolab.shareWithMdcolab', async (uri?: vscode.Uri) => {
+      // Resolve the file URI — from explorer context menu or active editor
+      const fileUri = uri ?? vscode.window.activeTextEditor?.document.uri;
+      if (!fileUri) {
+        vscode.window.showErrorMessage('No file selected');
+        return;
+      }
+
+      // Get repo info from the file's location
+      const repoInfo = getRepoInfo(fileUri);
+      if (!repoInfo) {
+        vscode.window.showErrorMessage('Not a GitHub repository');
+        return;
+      }
+
+      const relativePath = getRelativeFilePath(fileUri, repoInfo.rootPath);
+
+      try {
+        // Authenticate and get Octokit
+        const octokit = await api.getOctokit();
+
+        // Read existing .mdcolab/sharing.json (if any)
+        const sharingPath = '.mdcolab/sharing.json';
+        let existingSha: string | undefined;
+        let sharingConfig: { documents: Record<string, { mode: string; users: string[]; allowEditing: boolean; expiresAt: string }> } = { documents: {} };
+
+        try {
+          const { data } = await octokit.repos.getContent({
+            owner: repoInfo.owner,
+            repo: repoInfo.repo,
+            path: sharingPath,
+            ref: repoInfo.branch,
+          });
+          if (!Array.isArray(data) && data.type === 'file' && data.content) {
+            existingSha = data.sha;
+            const decoded = Buffer.from(data.content, 'base64').toString('utf-8');
+            sharingConfig = JSON.parse(decoded);
+          }
+        } catch (err: any) {
+          if (err.status !== 404) { throw err; }
+          // File doesn't exist yet — we'll create it
+        }
+
+        // Check if already shared
+        const existingEntry = sharingConfig.documents[relativePath];
+        if (existingEntry) {
+          // Already shared — check if expired
+          const expiry = new Date(existingEntry.expiresAt);
+          if (expiry > new Date()) {
+            // Still valid — just copy the link
+            const config = vscode.workspace.getConfiguration('mdcolab');
+            const baseUrl = config.get<string>('webAppUrl', 'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io');
+            const url = buildMdcolabUrl(repoInfo, relativePath, baseUrl);
+            const fileName = relativePath.split('/').pop() ?? relativePath;
+            await vscode.env.clipboard.writeText(`[${fileName}](${url})`);
+            vscode.window.showInformationMessage('Already shared! Link copied to clipboard.');
+            return;
+          }
+        }
+
+        // Create/update sharing entry
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        sharingConfig.documents[relativePath] = {
+          mode: 'anyone_with_link',
+          users: [],
+          allowEditing: false,
+          expiresAt,
+        };
+
+        const updatedContent = Buffer.from(JSON.stringify(sharingConfig, null, 2) + '\n').toString('base64');
+
+        await octokit.repos.createOrUpdateFileContents({
+          owner: repoInfo.owner,
+          repo: repoInfo.repo,
+          path: sharingPath,
+          message: `Share ${relativePath} via mdcolab`,
+          content: updatedContent,
+          sha: existingSha,
+          branch: repoInfo.branch,
+        });
+
+        // Copy the link
+        const config = vscode.workspace.getConfiguration('mdcolab');
+        const baseUrl = config.get<string>('webAppUrl', 'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io');
+        const url = buildMdcolabUrl(repoInfo, relativePath, baseUrl);
+        const fileName = relativePath.split('/').pop() ?? relativePath;
+        await vscode.env.clipboard.writeText(`[${fileName}](${url})`);
+        vscode.window.showInformationMessage('Shared! Link copied to clipboard.');
+      } catch (err) {
+        vscode.window.showErrorMessage('Failed to share: ' + (err instanceof Error ? err.message : err));
+      }
     })
   );
 

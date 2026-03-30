@@ -33,7 +33,7 @@ export interface CommentReply {
   createdAt: string;
 }
 
-async function getOctokit(): Promise<Octokit> {
+export async function getOctokit(): Promise<Octokit> {
   const usePrivate = vscode.workspace.getConfiguration('mdcolab').get<boolean>('privateRepoAccess', false);
   const scopes = usePrivate ? ['repo'] : ['public_repo'];
   const session = await vscode.authentication.getSession('github', scopes, { createIfNone: true });

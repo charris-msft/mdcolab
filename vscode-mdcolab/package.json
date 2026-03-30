@@ -40,6 +40,12 @@
         "icon": "$(link)"
       },
       {
+        "command": "mdcolab.shareWithMdcolab",
+        "title": "Share with mdcolab...",
+        "category": "mdcolab",
+        "icon": "$(share)"
+      },
+      {
         "command": "mdcolab.refreshComments",
         "title": "Refresh Comments",
         "category": "mdcolab",
@@ -72,6 +78,13 @@
         },
         {
           "command": "mdcolab.shareLink",
+          "when": "resourceLangId == markdown",
+          "group": "mdcolab"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "mdcolab.shareWithMdcolab",
           "when": "resourceLangId == markdown",
           "group": "mdcolab"
         }
