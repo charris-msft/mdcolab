@@ -24,7 +24,13 @@ export async function checkSharingAccess(
 
     const content = Buffer.from(data.content, "base64").toString("utf-8");
     const sharing: SharingConfig = JSON.parse(content);
-    const doc = sharing.documents[filePath];
+    // Try exact match first, then decoded/encoded variants to handle
+    // URL-encoded paths like "Azure%20MCP" vs decoded "Azure MCP"
+    const doc =
+      sharing.documents[filePath] ??
+      sharing.documents[decodeURIComponent(filePath)] ??
+      sharing.documents[encodeURIComponent(filePath).replace(/%2F/gi, "/")] ??
+      null;
 
     if (!doc) {
       return { authorized: false, allowEditing: false, sharing };

@@ -171,8 +171,9 @@ export async function PUT(
     }
   }
 
-  // Update config
-  config.documents[path] = {
+  // Update config — normalize path to decoded form to avoid URL-encoding mismatches
+  const normalizedPath = decodeURIComponent(path);
+  config.documents[normalizedPath] = {
     mode,
     users: mode === "specific_people" ? users : undefined,
     allowEditing: allowEditing === true ? true : undefined,
