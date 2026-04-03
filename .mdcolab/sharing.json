@@ -3,9 +3,10 @@
   "documents": {
     "README.md": {
       "mode": "anyone_with_link",
-      "expiresAt": "2026-04-10T18:19:58.123Z",
+      "allowEditing": true,
+      "expiresAt": "2026-04-10T18:20:16.071Z",
       "sharedBy": "charris-msft",
-      "sharedAt": "2026-04-03T18:19:58.363Z"
+      "sharedAt": "2026-04-03T18:20:16.323Z"
     }
   }
 }
