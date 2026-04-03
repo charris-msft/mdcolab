@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { CommentThread, Comment } from "@/types";
 
-type FilterStatus = "open" | "resolved" | "all";
+type FilterStatus = "open" | "resolved" | "issues" | "all";
 
 interface CommentState {
   threads: CommentThread[];

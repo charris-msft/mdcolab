@@ -35,11 +35,12 @@ import { useComments } from "@/hooks/use-comments";
 import { getGuestDisplayName, setGuestDisplayName, randomizeGuestName } from "@/lib/friendly-names";
 import { RefreshCw } from "lucide-react";
 
-type FilterStatus = "open" | "resolved" | "all";
+type FilterStatus = "open" | "resolved" | "issues" | "all";
 
 const filterLabels: Record<FilterStatus, string> = {
   open: "Open",
   resolved: "Resolved",
+  issues: "Issues",
   all: "All",
 };
 
@@ -74,10 +75,17 @@ export function CommentSidebar({ hasIssues = true, canEdit = false }: { hasIssue
 
   const filteredThreads = useMemo(() => {
     return threads.filter((t) => {
-      // Status filter
-      if (filterStatus !== "all" && t.status !== filterStatus) return false;
       // Exclude orphaned threads from main list
       if (orphanedThreadIds.includes(t.id)) return false;
+      // Status / promoted filter
+      if (filterStatus === "issues") {
+        if (!t.promoted) return false;
+      } else if (filterStatus === "open") {
+        if (t.status !== "open" || t.promoted) return false;
+      } else if (filterStatus === "resolved") {
+        if (t.status !== "resolved" || t.promoted) return false;
+      }
+      // "all" shows everything
       // Search filter
       if (searchQuery) {
         const q = searchQuery.toLowerCase();

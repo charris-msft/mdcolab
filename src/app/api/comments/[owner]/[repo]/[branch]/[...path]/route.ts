@@ -82,6 +82,7 @@ interface GitHubIssue {
   user: GitHubUser | null;
   created_at: string;
   updated_at: string;
+  labels: Array<{ name?: string }>;
 }
 
 interface GitHubComment {
@@ -177,9 +178,15 @@ function issueToThread(issue: GitHubIssue, issueComments: GitHubComment[]): Comm
     ),
   ];
 
+  const labelNames = issue.labels.map(l => l.name ?? "").filter(Boolean);
+  const promoted = labelNames.includes("bug") ? "bug" as const
+    : labelNames.includes("enhancement") ? "feature" as const
+    : undefined;
+
   return {
     id: String(issue.number),
     status: issue.state === "open" ? "open" : "resolved",
+    promoted,
     anchor: meta.anchor,
     comments,
   };
@@ -606,7 +613,7 @@ export async function POST(
       const currentLabels: Array<{ name?: string }> = (issueData.labels ?? []) as Array<{ name?: string }>;
       const labelsToRemove = currentLabels
         .map((l) => l.name ?? "")
-        .filter((n) => n === LABEL || n.startsWith("path:") || n.startsWith("file:"));
+        .filter((n) => n.startsWith("path:") || n.startsWith("file:"));
 
       // Remove mdcolab labels
       for (const labelName of labelsToRemove) {

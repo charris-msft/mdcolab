@@ -184,6 +184,21 @@ export function CommentThreadCard({
           : "hover:border-border/80"
       } ${thread.status === "resolved" ? "opacity-60" : ""}`}
     >
+      {/* Promoted type badge */}
+      {thread.promoted && (
+        <div className="flex items-center px-3 pt-2">
+          {thread.promoted === "bug" ? (
+            <Badge variant="secondary" className="text-[10px] h-5 gap-1 bg-red-500/15 text-red-400">
+              🐛 Bug
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="text-[10px] h-5 gap-1 bg-teal-500/15 text-teal-400">
+              ✨ Feature
+            </Badge>
+          )}
+        </div>
+      )}
+
       {/* Promoted badge */}
       {promotedUrl && (
         <div className="flex items-center justify-between px-3 pt-2">

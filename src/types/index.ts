@@ -38,6 +38,7 @@ export interface CommentAnchor {
 export interface CommentThread {
   id: string;
   status: "open" | "resolved";
+  promoted?: "bug" | "feature";
   anchor: CommentAnchor;
   comments: Comment[];
 }
