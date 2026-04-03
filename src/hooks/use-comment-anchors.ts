@@ -25,9 +25,41 @@ export function useCommentAnchors(editor: Editor | null) {
       if (thread.anchor.type !== "text-range") return;
       if (!thread.anchor.selectedText) return;
 
-      // Find the selected text in the document
+      // Find the best position for this anchor in the document.
+      // Priority: 1) exact offset match, 2) context-based match, 3) first occurrence
       const selectedText = thread.anchor.selectedText;
-      const textIndex = docText.indexOf(selectedText);
+      const { context, markdownOffset } = thread.anchor;
+      let textIndex = -1;
+
+      // 1. Try exact offset match
+      if (markdownOffset) {
+        const textAtOffset = docText.slice(markdownOffset.start, markdownOffset.end);
+        if (textAtOffset === selectedText) {
+          textIndex = markdownOffset.start;
+        }
+      }
+
+      // 2. Try context-based match (before + selectedText + after)
+      if (textIndex === -1 && context && (context.before || context.after)) {
+        const searchPattern = (context.before || "") + selectedText + (context.after || "");
+        const patternIndex = docText.indexOf(searchPattern);
+        if (patternIndex !== -1) {
+          textIndex = patternIndex + (context.before?.length ?? 0);
+        } else if (context.before) {
+          // Try matching with just the before context
+          const beforeWithText = context.before + selectedText;
+          const beforeIndex = docText.indexOf(beforeWithText);
+          if (beforeIndex !== -1) {
+            textIndex = beforeIndex + context.before.length;
+          }
+        }
+      }
+
+      // 3. Fall back to first occurrence (least reliable)
+      if (textIndex === -1) {
+        textIndex = docText.indexOf(selectedText);
+      }
+
       if (textIndex === -1) return;
 
       // Convert text offset to ProseMirror position

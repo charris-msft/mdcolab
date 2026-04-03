@@ -31,7 +31,29 @@ export function findAnchorRanges(document: vscode.TextDocument, threads: Mdcolab
     }
 
     const searchText = thread.anchor.selectedText;
-    const index = text.indexOf(searchText);
+    const { context } = thread.anchor;
+    let index = -1;
+
+    // 1. Try context-based match (before + selectedText + after)
+    if (context && (context.before || context.after)) {
+      const searchPattern = (context.before || '') + searchText + (context.after || '');
+      const patternIdx = text.indexOf(searchPattern);
+      if (patternIdx !== -1) {
+        index = patternIdx + (context.before?.length ?? 0);
+      } else if (context.before) {
+        const beforeWithText = context.before + searchText;
+        const beforeIdx = text.indexOf(beforeWithText);
+        if (beforeIdx !== -1) {
+          index = beforeIdx + context.before.length;
+        }
+      }
+    }
+
+    // 2. Fall back to first occurrence
+    if (index === -1) {
+      index = text.indexOf(searchText);
+    }
+
     if (index === -1) { continue; }
 
     const startPos = document.positionAt(index);
