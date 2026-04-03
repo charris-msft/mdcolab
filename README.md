@@ -2,6 +2,8 @@
 
 Collaborative markdown editing backed by GitHub. A modern alternative to Word for document collaboration — share markdown files via URL, leave inline comments, and get AI-powered writing assistance with GitHub Copilot.
 
+This is a test edit for Lily
+
 ## Key Features
 
 - **Rendered markdown viewing & WYSIWYG editing** — read and edit documents with a rich-text editor
@@ -9,6 +11,8 @@ Collaborative markdown editing backed by GitHub. A modern alternative to Word fo
 - **Document sharing via URL** — share any markdown file with a link
 - **Inline commenting & threaded discussions** — leave comments on specific text, just like Word
 - **GitHub Copilot AI Assistant** — AI-powered help for writing and editing documents
+
+---
 
 ## Copilot AI Assistant
 
@@ -23,6 +27,8 @@ Open the Copilot panel with the ✨ sparkle button in the toolbar.
 **Input history** — Press Up/Down arrow keys in the prompt input to recall previous prompts.
 
 > Requires a GitHub Copilot subscription.
+
+---
 
 ## Getting Started
 
@@ -40,7 +46,7 @@ NEXTAUTH_SECRET=<a random secret for NextAuth.js>
 NEXTAUTH_URL=http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to get started.
+Open <http://localhost:3000> to get started.
 
 ## Tech Stack
 
