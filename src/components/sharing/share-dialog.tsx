@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Link2, Lock, Globe, Loader2, X, UserPlus, Trash2, Pencil, CalendarClock } from "lucide-react";
+import { Link2, Lock, Globe, Loader2, X, UserPlus, Trash2, Pencil, CalendarClock, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -73,6 +73,16 @@ export function ShareDialog({
     queryFn: async () => {
       const res = await fetch(`/api/sharing/${owner}/${repo}`);
       if (!res.ok) throw new Error("Failed to fetch sharing config");
+      return res.json();
+    },
+    enabled: open,
+  });
+
+  const { data: permissionData } = useQuery<{ appInstalled?: boolean }>({
+    queryKey: ["permission", owner, repo],
+    queryFn: async () => {
+      const res = await fetch(`/api/repos/${owner}/${repo}/permission`);
+      if (!res.ok) throw new Error("Failed to fetch permission");
       return res.json();
     },
     enabled: open,
@@ -218,6 +228,25 @@ export function ShareDialog({
             {filePath}
           </DialogDescription>
         </DialogHeader>
+
+        {permissionData?.appInstalled === false && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-500/50 bg-amber-500/5 p-3 dark:bg-amber-500/10">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
+              <div className="min-w-0 flex-1 text-sm">
+                <p className="text-foreground">
+                  The mdcolab GitHub App is not installed on @{owner}&apos;s account. Shared links to private repos won&apos;t work until it&apos;s installed.
+                </p>
+                <a
+                  href="https://github.com/apps/mdcolab1-ai/installations/new"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-block text-xs font-medium text-amber-600 underline hover:text-amber-500 dark:text-amber-400 dark:hover:text-amber-300"
+                >
+                  Install GitHub App
+                </a>
+              </div>
+            </div>
+        )}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-8">

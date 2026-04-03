@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getOctokit } from "@/lib/github";
-import { isAppConfigured, getInstallationOctokit } from "@/lib/github-app";
+import { isAppConfigured, getInstallationOctokit, getInstallationId } from "@/lib/github-app";
 import { checkAnySharingAccess, checkSharingAccess } from "@/lib/sharing-utils";
 
 export async function GET(
@@ -11,6 +11,18 @@ export async function GET(
     const { owner, repo } = await params;
     const url = new URL(request.url);
     const filePath = url.searchParams.get("file");
+
+    // Check GitHub App installation (non-blocking, cached)
+    let appInstalled = false;
+    if (isAppConfigured()) {
+      try {
+        const installationId = await getInstallationId(owner);
+        appInstalled = !!installationId;
+      } catch {
+        // Default to false on failure
+      }
+    }
+
     let octokit;
     try {
       octokit = await getOctokit();
@@ -23,19 +35,19 @@ export async function GET(
           if (filePath) {
             const { authorized, allowEditing } = await checkSharingAccess(installationOctokit, owner, repo, filePath, null);
             if (authorized) {
-              return NextResponse.json({ permission: allowEditing ? "write" : "read", canEdit: allowEditing, hasIssues: true, anonymous: true });
+              return NextResponse.json({ permission: allowEditing ? "write" : "read", canEdit: allowEditing, hasIssues: true, anonymous: true, appInstalled });
             }
           }
           // Fallback: check if ANY doc is shared
           const { authorized } = await checkAnySharingAccess(installationOctokit, owner, repo, null);
           if (authorized) {
-            return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true, anonymous: true });
+            return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true, anonymous: true, appInstalled });
           }
         } catch {
           // Fall through to default
         }
       }
-      return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true });
+      return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true, appInstalled });
     }
 
     try {
@@ -47,10 +59,11 @@ export async function GET(
         permission,
         canEdit,
         hasIssues: repoData.has_issues,
+        appInstalled,
       });
     } catch {
       // If we can't check permissions, assume read-only
-      return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true });
+      return NextResponse.json({ permission: "read" as const, canEdit: false, hasIssues: true, appInstalled });
     }
   } catch (error) {
     if (error instanceof Error && error.message === "Not authenticated") {

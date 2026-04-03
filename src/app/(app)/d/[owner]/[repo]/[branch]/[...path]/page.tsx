@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEditorStore } from "@/stores/editor-store";
@@ -29,6 +29,8 @@ import {
   ExternalLink,
   Info,
   X,
+  AlertTriangle,
+  CalendarClock,
 } from "lucide-react";
 import { CopilotIcon } from "@/components/icons/copilot-icon";
 import Link from "next/link";
@@ -51,9 +53,9 @@ import { useComments } from "@/hooks/use-comments";
 import { useKeyboardShortcuts, SHORTCUTS } from "@/hooks/use-keyboard-shortcuts";
 import { useCommentNavigation } from "@/hooks/use-comment-navigation";
 import { addRecentDoc } from "@/lib/recent-docs";
-import type { SharingConfig } from "@/lib/sharing-types";
 
 export default function DocumentPage() {
+  const router = useRouter();
   const params = useParams<{
     owner: string;
     repo: string;
@@ -135,7 +137,11 @@ export default function DocumentPage() {
       );
       if (res.status === 403) {
         const body = await res.json();
-        throw Object.assign(new Error(body.message ?? "No access"), { code: "no_access" });
+        throw Object.assign(new Error(body.message ?? "No access"), {
+          code: "no_access",
+          reason: body.reason as string | undefined,
+          errorOwner: body.owner as string | undefined,
+        });
       }
       if (!res.ok) throw new Error("Failed to load file");
       return res.json() as Promise<{ content: string; sha: string; path: string }>;
@@ -264,13 +270,9 @@ export default function DocumentPage() {
   const openThreadCount = threads.filter((t) => t.status === "open").length;
 
   const isNoAccess = !!(fileError && (fileError as Error & { code?: string }).code === "no_access");
-
-  // When access is denied, check if sharing config exists for this document
-  const sharingQuery = useQuery({
-    queryKey: ["sharing", owner, repo],
-    queryFn: () => fetch(`/api/sharing/${owner}/${repo}`).then((r) => r.json()) as Promise<{ sharing: SharingConfig | null }>,
-    enabled: isNoAccess,
-  });
+  const errorReason = (fileError as Error & { reason?: string })?.reason;
+  const errorOwner = (fileError as Error & { errorOwner?: string })?.errorOwner ?? owner;
+  const currentUserLogin = author.login;
 
   if (fileLoading) {
     return (
@@ -281,33 +283,74 @@ export default function DocumentPage() {
   }
 
   if (fileError || !fileData) {
-    const sharingDoc = sharingQuery.data?.sharing?.documents?.[filePath];
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         {isNoAccess ? (
           <>
-            <div className="rounded-full bg-amber-500/10 p-3">
-              <Lock className="h-8 w-8 text-amber-500" />
-            </div>
-            {sharingDoc ? (
+            {errorReason === "app_not_installed" ? (
               <>
+                <div className="rounded-full bg-amber-500/10 p-3">
+                  <AlertTriangle className="h-8 w-8 text-amber-500" />
+                </div>
                 <div className="text-center space-y-1">
-                  <p className="font-semibold text-foreground">You don&apos;t have access to this document</p>
+                  <p className="font-semibold text-foreground">GitHub App not installed</p>
                   <p className="text-sm text-muted-foreground max-w-md">
-                    Ask <span className="font-medium">@{sharingDoc.sharedBy}</span> to share it with you.
+                    The mdcolab GitHub App needs to be installed on <span className="font-medium">@{errorOwner}</span>&apos;s account to share files from private repos. Ask the repository owner to install it.
                   </p>
                 </div>
-                <Button asChild variant="outline">
-                  <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => {
+                      navigator.clipboard.writeText("https://github.com/apps/mdcolab1-ai/installations/new");
+                      toast.success("Install link copied to clipboard");
+                    }}
+                  >
+                    Copy install link
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
+                  </Button>
+                </div>
+              </>
+            ) : errorReason === "not_shared" ? (
+              <>
+                <div className="rounded-full bg-amber-500/10 p-3">
+                  <Lock className="h-8 w-8 text-amber-500" />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="font-semibold text-foreground">Not shared with you</p>
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    This document hasn&apos;t been shared with your account (<span className="font-medium">@{currentUserLogin}</span>). Ask the repository owner to share it with you.
+                  </p>
+                </div>
+                <Button variant="outline" onClick={() => router.back()}>
+                  Back
+                </Button>
+              </>
+            ) : errorReason === "share_expired" ? (
+              <>
+                <div className="rounded-full bg-amber-500/10 p-3">
+                  <CalendarClock className="h-8 w-8 text-amber-500" />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="font-semibold text-foreground">Share link expired</p>
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    The sharing link for this document has expired. Ask the owner to reshare it.
+                  </p>
+                </div>
+                <Button variant="outline" onClick={() => router.back()}>
+                  Back
                 </Button>
               </>
             ) : (
               <>
+                <div className="rounded-full bg-amber-500/10 p-3">
+                  <Lock className="h-8 w-8 text-amber-500" />
+                </div>
                 <div className="text-center space-y-1">
                   <p className="font-semibold text-foreground">Private repository</p>
                   <p className="text-sm text-muted-foreground max-w-md">
-                    You don&apos;t have access to <span className="font-medium">{owner}/{repo}</span> through mdcolab yet.
-                    Grant access to this repo via the GitHub App to view and collaborate on private files.
+                    You don&apos;t have access to <span className="font-medium">{owner}/{repo}</span>. If this is a private repo, the repository owner needs to install the mdcolab GitHub App.
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -317,8 +360,8 @@ export default function DocumentPage() {
                       Grant repo access
                     </a>
                   </Button>
-                  <Button asChild variant="outline">
-                    <Link href={`/repos/${owner}/${repo}`}>Back to repository</Link>
+                  <Button variant="outline" onClick={() => router.back()}>
+                    Back
                   </Button>
                 </div>
               </>
