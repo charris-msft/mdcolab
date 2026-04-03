@@ -661,7 +661,7 @@ export default function DocumentPage() {
         {/* Comment Sidebar — Desktop: side panel, Mobile: bottom sheet */}
         {isSidebarOpen && !isMobile && (
           <aside className="w-80 border-l border-border overflow-y-auto shrink-0 comment-sidebar">
-            <CommentSidebar hasIssues={hasIssues} />
+            <CommentSidebar hasIssues={hasIssues} canEdit={canEdit} />
           </aside>
         )}
 
@@ -677,7 +677,7 @@ export default function DocumentPage() {
           >
             <SheetContent side="bottom" className="h-[70vh]" showCloseButton={false}>
               <SheetTitle className="sr-only">Comments</SheetTitle>
-              <CommentSidebar hasIssues={hasIssues} />
+              <CommentSidebar hasIssues={hasIssues} canEdit={canEdit} />
             </SheetContent>
           </Sheet>
         )}

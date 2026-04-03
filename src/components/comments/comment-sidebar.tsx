@@ -43,7 +43,7 @@ const filterLabels: Record<FilterStatus, string> = {
   all: "All",
 };
 
-export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
+export function CommentSidebar({ hasIssues = true, canEdit = false }: { hasIssues?: boolean; canEdit?: boolean }) {
   const params = useParams<{ owner: string; repo: string; branch: string; path: string[] }>();
   const filePath = params.path?.join("/") ?? "";
   const { status } = useSession();
@@ -351,6 +351,11 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
                     thread={thread}
                     isActive={thread.id === activeThreadId}
                     isAnonymous={isAnonymous}
+                    canEdit={canEdit}
+                    owner={params.owner}
+                    repo={params.repo}
+                    branch={params.branch}
+                    filePath={filePath}
                     onReply={handleReply}
                     onResolve={handleResolve}
                     onReopen={handleReopen}
@@ -379,6 +384,11 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
                         thread={thread}
                         isActive={thread.id === activeThreadId}
                         isAnonymous={isAnonymous}
+                        canEdit={canEdit}
+                        owner={params.owner}
+                        repo={params.repo}
+                        branch={params.branch}
+                        filePath={filePath}
                         onReply={handleReply}
                         onResolve={handleResolve}
                         onReopen={handleReopen}
@@ -486,6 +496,11 @@ export function CommentSidebar({ hasIssues = true }: { hasIssues?: boolean }) {
                           thread={thread}
                           isActive={thread.id === activeThreadId}
                           isAnonymous={isAnonymous}
+                          canEdit={canEdit}
+                          owner={params.owner}
+                          repo={params.repo}
+                          branch={params.branch}
+                          filePath={filePath}
                           onReply={handleReply}
                           onResolve={handleResolve}
                           onReopen={handleReopen}

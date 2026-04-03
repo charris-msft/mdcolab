@@ -13,6 +13,8 @@ interface CommentReplyInputProps {
   submitLabel?: string;
   autoFocus?: boolean;
   isAnonymous?: boolean;
+  owner?: string;
+  repo?: string;
   onSubmit: (body: string, mentions?: string[]) => void;
   onCancel: () => void;
 }
@@ -23,6 +25,8 @@ export function CommentReplyInput({
   submitLabel = "Reply",
   autoFocus = false,
   isAnonymous = false,
+  owner,
+  repo,
   onSubmit,
   onCancel,
 }: CommentReplyInputProps) {
@@ -92,6 +96,8 @@ export function CommentReplyInput({
           onSubmit={handleSubmit}
           onMention={handleMention}
           placeholder="Reply… (@ to mention)"
+          owner={owner}
+          repo={repo}
         />
         <div className="flex justify-end gap-1.5">
           <Button variant="ghost" size="sm" onClick={onCancel}>

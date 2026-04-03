@@ -18,6 +18,8 @@ interface MentionInputProps {
   onMention?: (login: string) => void;
   placeholder?: string;
   className?: string;
+  owner?: string;
+  repo?: string;
 }
 
 export function MentionInput({
@@ -27,6 +29,8 @@ export function MentionInput({
   onMention,
   placeholder = "Reply… (@ to mention)",
   className,
+  owner,
+  repo,
 }: MentionInputProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [results, setResults] = useState<MentionUser[]>([]);
@@ -46,9 +50,10 @@ export function MentionInput({
     }
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `/api/users/search?q=${encodeURIComponent(query)}`
-        );
+        const params = new URLSearchParams({ q: query });
+        if (owner) params.set("owner", owner);
+        if (repo) params.set("repo", repo);
+        const res = await fetch(`/api/users/search?${params.toString()}`);
         const data: MentionUser[] = await res.json();
         setResults(data);
         setShowDropdown(data.length > 0);
@@ -58,7 +63,7 @@ export function MentionInput({
         setShowDropdown(false);
       }
     }, 300);
-  }, []);
+  }, [owner, repo]);
 
   const insertMention = useCallback(
     (login: string) => {

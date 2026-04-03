@@ -9,14 +9,26 @@ import { relativeTime } from "@/lib/time";
 import { renderMentions } from "@/lib/render-mentions";
 import { CommentReplyInput } from "./comment-reply-input";
 import { SuggestedEditView } from "./suggested-edit-view";
-import { Check, MessageSquare, RotateCcw } from "lucide-react";
+import { Check, MessageSquare, RotateCcw, Megaphone, Loader2, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 import type { CommentThread, Comment } from "@/types";
 
 export interface CommentThreadCardProps {
   thread: CommentThread;
   isActive: boolean;
   isAnonymous?: boolean;
+  canEdit?: boolean;
+  owner?: string;
+  repo?: string;
+  branch?: string;
+  filePath?: string;
   onReply: (threadId: string, body: string) => void;
   onResolve: (threadId: string) => void;
   onReopen: (threadId: string) => void;
@@ -79,6 +91,11 @@ export function CommentThreadCard({
   thread,
   isActive,
   isAnonymous,
+  canEdit,
+  owner,
+  repo,
+  branch,
+  filePath,
   onReply,
   onResolve,
   onReopen,
@@ -87,6 +104,8 @@ export function CommentThreadCard({
   onRejectSuggestion,
 }: CommentThreadCardProps) {
   const [showReplyInput, setShowReplyInput] = useState(false);
+  const [promoting, setPromoting] = useState(false);
+  const [promotedUrl, setPromotedUrl] = useState<string | null>(null);
 
   // Auto-show reply input for new threads with no comments
   const autoReply = isActive && thread.comments.length === 0;
@@ -103,6 +122,49 @@ export function CommentThreadCard({
   const handleSelect = useCallback(() => {
     onSelect(thread.id);
   }, [thread.id, onSelect]);
+
+  const handlePromote = useCallback(
+    async (issueType: "bug" | "feature") => {
+      if (!owner || !repo || !branch || !filePath) return;
+      setPromoting(true);
+      try {
+        const res = await fetch(
+          `/api/comments/${owner}/${repo}/${branch}/${filePath}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "promote",
+              issueNumber: Number(thread.id),
+              issueType,
+            }),
+          }
+        );
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error ?? "Promotion failed");
+        setPromotedUrl(data.issueUrl);
+        toast.success("Promoted to issue!", {
+          description: (
+            <a
+              href={data.issueUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 underline"
+            >
+              View on GitHub <ExternalLink className="size-3" />
+            </a>
+          ),
+        });
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to promote to issue"
+        );
+      } finally {
+        setPromoting(false);
+      }
+    },
+    [owner, repo, branch, filePath, thread.id]
+  );
 
   const anchorText = thread.anchor.selectedText;
   const truncatedAnchor =
@@ -122,6 +184,25 @@ export function CommentThreadCard({
           : "hover:border-border/80"
       } ${thread.status === "resolved" ? "opacity-60" : ""}`}
     >
+      {/* Promoted badge */}
+      {promotedUrl && (
+        <div className="flex items-center justify-between px-3 pt-2">
+          <Badge variant="secondary" className="text-[10px] h-5 gap-1 bg-violet-500/15 text-violet-400">
+            <Megaphone className="size-3" />
+            Promoted
+          </Badge>
+          <a
+            href={promotedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1"
+          >
+            View issue <ExternalLink className="size-3" />
+          </a>
+        </div>
+      )}
+
       {/* Resolved badge */}
       {thread.status === "resolved" && (
         <div className="flex items-center justify-between px-3 pt-2">
@@ -176,6 +257,8 @@ export function CommentThreadCard({
               submitLabel={thread.comments.length === 0 ? "Comment" : "Reply"}
               autoFocus={autoReply}
               isAnonymous={isAnonymous}
+              owner={owner}
+              repo={repo}
             />
           </div>
         )}
@@ -183,18 +266,49 @@ export function CommentThreadCard({
         {/* Actions */}
         {thread.status === "open" && !replyVisible && (
           <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/50">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs h-7 gap-1"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowReplyInput(true);
-              }}
-            >
-              <MessageSquare className="size-3" />
-              Reply
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-7 gap-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowReplyInput(true);
+                }}
+              >
+                <MessageSquare className="size-3" />
+                Reply
+              </Button>
+              {canEdit && !isNaN(Number(thread.id)) && !promotedUrl && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-7 gap-1 text-muted-foreground hover:text-violet-500"
+                      disabled={promoting}
+                      onClick={(e) => e.stopPropagation()}
+                      title="Promote to GitHub issue"
+                    >
+                      {promoting ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <Megaphone className="size-3" />
+                      )}
+                      Promote
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenuItem onClick={() => handlePromote("bug")}>
+                      🐛 Bug Report
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handlePromote("feature")}>
+                      ✨ Feature Request
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
             <Button
               variant="ghost"
               size="sm"

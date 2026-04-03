@@ -92,6 +92,12 @@ interface GitHubComment {
   updated_at: string;
 }
 
+function extractMentions(body: string): string[] {
+  const matches = body.match(/@([a-zA-Z0-9_-]+)/g);
+  if (!matches) return [];
+  return [...new Set(matches.map((m) => m.slice(1)))];
+}
+
 function toComment(src: { id: number; body: string; user: GitHubUser | null; created_at: string; updated_at: string }, anonOverride?: { displayName: string }, proxyOverride?: { login: string; avatarUrl: string }): Comment {
   // Check for inline anonymous/proxy author metadata in the body (for replies)
   const inlineAnon = !anonOverride ? parseAnonAuthor(src.body) : null;
@@ -110,7 +116,7 @@ function toComment(src: { id: number; body: string; user: GitHubUser | null; cre
         isAnonymous: true,
       },
       body: cleanBody,
-      mentions: [],
+      mentions: extractMentions(cleanBody),
       suggestedEdit: null,
       createdAt: src.created_at,
       updatedAt: src.updated_at,
@@ -125,7 +131,7 @@ function toComment(src: { id: number; body: string; user: GitHubUser | null; cre
         avatarUrl: proxy.avatarUrl,
       },
       body: cleanBody,
-      mentions: [],
+      mentions: extractMentions(cleanBody),
       suggestedEdit: null,
       createdAt: src.created_at,
       updatedAt: src.updated_at,
@@ -139,7 +145,7 @@ function toComment(src: { id: number; body: string; user: GitHubUser | null; cre
       avatarUrl: src.user?.avatar_url ?? "",
     },
     body: cleanBody,
-    mentions: [],
+    mentions: extractMentions(cleanBody),
     suggestedEdit: null,
     createdAt: src.created_at,
     updatedAt: src.updated_at,
@@ -566,6 +572,66 @@ export async function POST(
         state: action === "resolve" ? "closed" : "open",
       });
       return NextResponse.json({ ok: true });
+    }
+
+    if (action === "promote") {
+      const issueNumber: number = body.issueNumber;
+      const issueType: "bug" | "feature" = body.issueType;
+
+      // Check write permission
+      const { data: repoData } = await octokit.repos.get({ owner, repo });
+      if (!repoData.permissions?.push) {
+        return NextResponse.json({ error: "Write access required to promote" }, { status: 403 });
+      }
+
+      // Fetch the issue
+      let issueData;
+      try {
+        const resp = await octokit.issues.get({ owner, repo, issue_number: issueNumber });
+        issueData = resp.data;
+      } catch (getErr: unknown) {
+        const getStatus = typeof getErr === "object" && getErr !== null && "status" in getErr ? (getErr as { status: number }).status : 0;
+        if (getStatus === 404) {
+          return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+        }
+        throw getErr;
+      }
+
+      // Clean up the title: extract quoted text from `[mdcolab] "quoted text" — filepath`
+      const currentTitle: string = issueData.title ?? "";
+      const titleMatch = currentTitle.match(/^\[mdcolab\]\s*"(.+?)"\s*—\s*.+$/);
+      const newTitle = titleMatch ? titleMatch[1] : currentTitle.replace(/^\[mdcolab\]\s*/, "");
+
+      // Identify mdcolab-related labels to remove
+      const currentLabels: Array<{ name?: string }> = (issueData.labels ?? []) as Array<{ name?: string }>;
+      const labelsToRemove = currentLabels
+        .map((l) => l.name ?? "")
+        .filter((n) => n === LABEL || n.startsWith("path:") || n.startsWith("file:"));
+
+      // Remove mdcolab labels
+      for (const labelName of labelsToRemove) {
+        try {
+          await octokit.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: labelName });
+        } catch {
+          // Label may already be removed; ignore
+        }
+      }
+
+      // Add the appropriate label
+      const newLabel = issueType === "bug" ? "bug" : "enhancement";
+      const newLabelColor = issueType === "bug" ? "d73a4a" : "a2eeef";
+      const newLabelDesc = issueType === "bug" ? "Something isn't working" : "New feature or request";
+      await ensureLabelSafe(octokit, owner, repo, newLabel, newLabelColor, newLabelDesc);
+      await octokit.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: [newLabel] });
+
+      // Update the title
+      await octokit.issues.update({ owner, repo, issue_number: issueNumber, title: newTitle });
+
+      // Add promotion comment
+      const promoteMsg = `🔄 Promoted from mdcolab comment thread to ${issueType === "bug" ? "bug report" : "feature request"}.`;
+      await octokit.issues.createComment({ owner, repo, issue_number: issueNumber, body: promoteMsg });
+
+      return NextResponse.json({ ok: true, issueUrl: `https://github.com/${owner}/${repo}/issues/${issueNumber}` });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
