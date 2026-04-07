@@ -13,27 +13,9 @@ export function useCommentAnchors(editor: Editor | null) {
   const { threads, activeThreadId, filterStatus } = useCommentStore();
   const appliedThreadsRef = useRef<Set<string>>(new Set());
 
-  // Apply comment marks to the editor when threads are loaded or filter changes
+  // Apply comment marks to the editor when threads are loaded
   useEffect(() => {
-    if (!editor) return;
-
-    // Clear all existing marks and tracking so we re-apply only visible ones
-    appliedThreadsRef.current.clear();
-    try {
-      editor
-        .chain()
-        .command(({ tr }) => {
-          const markType = editor.schema.marks.commentMark;
-          if (!markType) return false;
-          tr.removeMark(0, tr.doc.content.size, markType);
-          return true;
-        })
-        .run();
-    } catch {
-      // Safe to ignore if no marks exist
-    }
-
-    if (threads.length === 0) return;
+    if (!editor || threads.length === 0) return;
 
     const doc = editor.state.doc;
     const docText = doc.textContent;
@@ -42,11 +24,6 @@ export function useCommentAnchors(editor: Editor | null) {
       if (appliedThreadsRef.current.has(thread.id)) return;
       if (thread.anchor.type !== "text-range") return;
       if (!thread.anchor.selectedText) return;
-
-      // Skip threads not visible under the current filter
-      if (filterStatus === "issues" && !thread.promoted) return;
-      if (filterStatus === "open" && thread.promoted) return;
-      if (filterStatus === "resolved" && thread.promoted) return;
 
       // Find the best position for this anchor in the document.
       // Priority: 1) exact offset match, 2) context-based match, 3) first occurrence
@@ -124,6 +101,7 @@ export function useCommentAnchors(editor: Editor | null) {
               const mark = markType.create({
                 threadId: thread.id,
                 resolved: thread.status === "resolved",
+                promoted: !!thread.promoted,
               });
               tr.addMark(fromPos!, toPos!, mark);
               return true;
@@ -135,7 +113,13 @@ export function useCommentAnchors(editor: Editor | null) {
         }
       }
     });
-  }, [editor, threads, filterStatus]);
+  }, [editor, threads]);
+
+  // Update editor highlight visibility based on active filter (CSS-driven, no mark re-application)
+  useEffect(() => {
+    if (!editor) return;
+    editor.view.dom.dataset.commentFilter = filterStatus;
+  }, [editor, filterStatus]);
 
   // Scroll to and highlight the anchor for a given threadId
   const scrollToThread = useCallback((threadId: string) => {

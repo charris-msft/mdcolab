@@ -38,6 +38,13 @@ export const CommentMark = Mark.create<CommentMarkOptions>({
           "data-resolved": attributes.resolved ? "true" : undefined,
         }),
       },
+      promoted: {
+        default: false,
+        parseHTML: (element) => element.getAttribute("data-promoted") === "true",
+        renderHTML: (attributes) => ({
+          "data-promoted": attributes.promoted ? "true" : undefined,
+        }),
+      },
     };
   },
 
@@ -50,9 +57,13 @@ export const CommentMark = Mark.create<CommentMarkOptions>({
   },
 
   renderHTML({ HTMLAttributes }) {
-    const classes = HTMLAttributes["data-resolved"] === "true"
-      ? "comment-highlight comment-highlight-resolved"
-      : "comment-highlight";
+    let classes = "comment-highlight";
+    if (HTMLAttributes["data-resolved"] === "true") {
+      classes += " comment-highlight-resolved";
+    }
+    if (HTMLAttributes["data-promoted"] === "true") {
+      classes += " comment-highlight-promoted";
+    }
     return [
       "span",
       mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {

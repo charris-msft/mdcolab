@@ -168,6 +168,20 @@ body {
   border-bottom: 1px dashed hsl(var(--muted-foreground) / 0.3);
 }
 
+/* Filter-based comment highlight visibility (driven by data-comment-filter on the editor) */
+[data-comment-filter="issues"] .comment-highlight:not(.comment-highlight-promoted) {
+  background-color: transparent !important;
+  border-bottom-color: transparent !important;
+  pointer-events: none;
+}
+
+[data-comment-filter="open"] .comment-highlight-promoted,
+[data-comment-filter="resolved"] .comment-highlight-promoted {
+  background-color: transparent !important;
+  border-bottom-color: transparent !important;
+  pointer-events: none;
+}
+
 /* Shimmer animation for loading states */
 @keyframes shimmer {
   0% { transform: translateX(-100%); }
