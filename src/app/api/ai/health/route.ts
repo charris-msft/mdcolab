@@ -3,6 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 // GET /api/ai/health — check if the user has GitHub Copilot access
+//
+// The Copilot SDK authenticates via its own CLI flow, not the
+// copilot_internal/v2/token endpoint (which needs a `copilot` OAuth
+// scope we don't request).  We enable the button for any authenticated
+// user; if they lack a Copilot subscription the SDK will surface a
+// clear error at chat-time.
 export async function GET() {
   const session = (await getServerSession(authOptions)) as {
     accessToken?: string;
@@ -11,29 +17,11 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  try {
-    const res = await fetch("https://api.github.com/copilot_internal/v2/token", {
-      headers: {
-        Authorization: `token ${session.accessToken}`,
-        Accept: "application/json",
-      },
-    });
-
-    const available = res.ok;
-    return NextResponse.json(
-      { available },
-      {
-        status: 200,
-        headers: { "Cache-Control": "private, max-age=300" },
-      }
-    );
-  } catch {
-    return NextResponse.json(
-      { available: false },
-      {
-        status: 200,
-        headers: { "Cache-Control": "private, max-age=300" },
-      }
-    );
-  }
+  return NextResponse.json(
+    { available: true },
+    {
+      status: 200,
+      headers: { "Cache-Control": "private, max-age=300" },
+    }
+  );
 }
