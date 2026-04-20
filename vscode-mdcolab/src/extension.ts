@@ -159,14 +159,97 @@ export async function activate(context: vscode.ExtensionContext) {
 
       const relativePath = getRelativeFilePath(fileUri, repoInfo.rootPath);
 
+      // --- Interactive share configuration (matches the web app) ---
+      type SharingMode = 'anyone_with_link' | 'specific_people';
+      type ModePick = vscode.QuickPickItem & { value: SharingMode };
+      const modePick = await vscode.window.showQuickPick<ModePick>(
+        [
+          {
+            label: '$(globe) Anyone with the link',
+            description: 'View/comment without sign-in',
+            value: 'anyone_with_link',
+          },
+          {
+            label: '$(lock) Specific people',
+            description: 'Only listed GitHub users',
+            value: 'specific_people',
+          },
+        ],
+        { placeHolder: 'Who should have access?', ignoreFocusOut: true }
+      );
+      if (!modePick) { return; }
+      const mode: SharingMode = modePick.value;
+
+      let users: string[] = [];
+      if (mode === 'specific_people') {
+        const usersInput = await vscode.window.showInputBox({
+          prompt: 'GitHub usernames (comma-separated)',
+          placeHolder: 'alice, bob',
+          ignoreFocusOut: true,
+        });
+        if (usersInput === undefined) { return; }
+        users = usersInput
+          .split(',')
+          .map((u) => u.trim().replace(/^@/, ''))
+          .filter((u) => u.length > 0);
+      }
+
+      type ExpiryPick = vscode.QuickPickItem & { days: number };
+      const expiryPick = await vscode.window.showQuickPick<ExpiryPick>(
+        [
+          { label: '7 days', days: 7 },
+          { label: '1 day', days: 1 },
+          { label: '30 days', days: 30 },
+          { label: '90 days', days: 90 },
+          { label: 'No expiration', days: 0 },
+        ],
+        { placeHolder: 'Expiration', ignoreFocusOut: true }
+      );
+      if (!expiryPick) { return; }
+      const expiresAt: string | undefined =
+        expiryPick.days > 0
+          ? new Date(Date.now() + expiryPick.days * 24 * 60 * 60 * 1000).toISOString()
+          : undefined;
+
+      type EditingPick = vscode.QuickPickItem & { value: boolean };
+      const editingPick = await vscode.window.showQuickPick<EditingPick>(
+        [
+          { label: '$(eye) View and comment only', value: false },
+          { label: '$(pencil) Allow editing', value: true },
+        ],
+        { placeHolder: 'Permission level', ignoreFocusOut: true }
+      );
+      if (!editingPick) { return; }
+      const allowEditing = editingPick.value;
+
       try {
         // Authenticate and get Octokit
         const octokit = await api.getOctokit();
 
-        // Read existing .mdcolab/sharing.json (if any)
+        // Identify the current user for sharedBy
+        let sharedBy = 'unknown';
+        try {
+          const { data } = await octokit.users.getAuthenticated();
+          sharedBy = data.login;
+        } catch { /* best-effort */ }
+
+        // Read existing .mdcolab/sharing.json (if any). Always read-merge-write
+        // so we never clobber entries for other documents.
         const sharingPath = '.mdcolab/sharing.json';
         let existingSha: string | undefined;
-        let sharingConfig: { documents: Record<string, { mode: string; users: string[]; allowEditing: boolean; expiresAt: string }> } = { documents: {} };
+        interface SharingDocument {
+          mode: SharingMode;
+          users?: string[];
+          allowEditing?: boolean;
+          expiresAt?: string;
+          sharedBy: string;
+          sharedAt: string;
+        }
+        interface SharingConfig {
+          version: number;
+          documents: Record<string, SharingDocument>;
+        }
+        let sharingConfig: SharingConfig = { version: 1, documents: {} };
 
         try {
           const { data } = await octokit.repos.getContent({
@@ -178,58 +261,56 @@ export async function activate(context: vscode.ExtensionContext) {
           if (!Array.isArray(data) && data.type === 'file' && data.content) {
             existingSha = data.sha;
             const decoded = Buffer.from(data.content, 'base64').toString('utf-8');
-            sharingConfig = JSON.parse(decoded);
+            const parsed = JSON.parse(decoded) as Partial<SharingConfig>;
+            sharingConfig = {
+              version: parsed.version ?? 1,
+              documents: parsed.documents ?? {},
+            };
           }
         } catch (err: any) {
           if (err.status !== 404) { throw err; }
           // File doesn't exist yet — we'll create it
         }
 
-        // Check if already shared
-        const existingEntry = sharingConfig.documents[relativePath];
-        if (existingEntry) {
-          // Already shared — check if expired
-          const expiry = new Date(existingEntry.expiresAt);
-          if (expiry > new Date()) {
-            // Still valid — just copy the link
-            const config = vscode.workspace.getConfiguration('mdcolab');
-            const baseUrl = config.get<string>('webAppUrl', 'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io');
-            const url = buildMdcolabUrl(repoInfo, relativePath, baseUrl);
-            const fileName = relativePath.split('/').pop() ?? relativePath;
-            await vscode.env.clipboard.writeText(`[${fileName}](${url})`);
-            vscode.window.showInformationMessage('Already shared! Link copied to clipboard.');
-            return;
-          }
-        }
-
-        // Create/update sharing entry
-        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        // Write/overwrite entry for this file
         sharingConfig.documents[relativePath] = {
-          mode: 'anyone_with_link',
-          users: [],
-          allowEditing: false,
+          mode,
+          users: mode === 'specific_people' ? users : undefined,
+          allowEditing: allowEditing === true ? true : undefined,
           expiresAt,
+          sharedBy,
+          sharedAt: new Date().toISOString(),
         };
 
-        const updatedContent = Buffer.from(JSON.stringify(sharingConfig, null, 2) + '\n').toString('base64');
+        const updatedContent = Buffer.from(
+          JSON.stringify(sharingConfig, null, 2) + '\n'
+        ).toString('base64');
 
         await octokit.repos.createOrUpdateFileContents({
           owner: repoInfo.owner,
           repo: repoInfo.repo,
           path: sharingPath,
-          message: `Share ${relativePath} via mdcolab`,
+          message: `docs: update sharing for ${relativePath}`,
           content: updatedContent,
           sha: existingSha,
           branch: repoInfo.branch,
         });
 
         // Copy the link
-        const config = vscode.workspace.getConfiguration('mdcolab');
-        const baseUrl = config.get<string>('webAppUrl', 'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io');
+        const cfg = vscode.workspace.getConfiguration('mdcolab');
+        const baseUrl = cfg.get<string>(
+          'webAppUrl',
+          'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io'
+        );
         const url = buildMdcolabUrl(repoInfo, relativePath, baseUrl);
         const fileName = relativePath.split('/').pop() ?? relativePath;
         await vscode.env.clipboard.writeText(`[${fileName}](${url})`);
-        vscode.window.showInformationMessage('Shared! Link copied to clipboard.');
+
+        const modeLabel = mode === 'anyone_with_link' ? 'Anyone with the link' : `${users.length} user${users.length === 1 ? '' : 's'}`;
+        const permLabel = allowEditing ? 'can edit' : 'view/comment';
+        vscode.window.showInformationMessage(
+          `Shared (${modeLabel}, ${permLabel}). Link copied to clipboard.`
+        );
       } catch (err) {
         vscode.window.showErrorMessage('Failed to share: ' + (err instanceof Error ? err.message : err));
       }
