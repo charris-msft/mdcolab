@@ -3,6 +3,10 @@ import { getRepoInfo, getRelativeFilePath, buildMdcolabUrl, RepoInfo } from './g
 import * as api from './github-api.js';
 import { findAnchorRanges, applyDecorations } from './comment-decorations.js';
 import { CommentsTreeProvider } from './comments-tree.js';
+import {
+  SharedFilesTreeProvider,
+  SharedFileItem,
+} from './shared-files-tree.js';
 
 // State
 let currentThreads: api.CommentThread[] = [];
@@ -13,7 +17,7 @@ let refreshTimer: ReturnType<typeof setInterval> | undefined;
 export async function activate(context: vscode.ExtensionContext) {
   console.log('mdcolab extension activated');
 
-  // Create tree provider
+  // Create tree providers
   const treeProvider = new CommentsTreeProvider();
   const treeView = vscode.window.createTreeView('mdcolab.commentsView', {
     treeDataProvider: treeProvider,
@@ -21,12 +25,19 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(treeView);
 
+  const sharedFilesProvider = new SharedFilesTreeProvider();
+  const sharedFilesView = vscode.window.createTreeView('mdcolab.sharedFilesView', {
+    treeDataProvider: sharedFilesProvider,
+  });
+  context.subscriptions.push(sharedFilesView);
+
   // --- Load comments for current file ---
   async function loadComments() {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.languageId !== 'markdown') {
       currentThreads = [];
       treeProvider.setThreads([]);
+      sharedFilesProvider.setCurrentFilePath(null);
       return;
     }
 
@@ -35,10 +46,19 @@ export async function activate(context: vscode.ExtensionContext) {
     if (!currentRepoInfo) {
       currentThreads = [];
       treeProvider.setThreads([]);
+      sharedFilesProvider.setContext(null, null);
       return;
     }
 
     currentFilePath = getRelativeFilePath(fileUri, currentRepoInfo.rootPath);
+    sharedFilesProvider.setContext(
+      {
+        owner: currentRepoInfo.owner,
+        repo: currentRepoInfo.repo,
+        branch: currentRepoInfo.branch,
+      },
+      currentFilePath
+    );
 
     try {
       currentThreads = await api.fetchCommentThreads(
@@ -158,6 +178,74 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       const relativePath = getRelativeFilePath(fileUri, repoInfo.rootPath);
+
+      // Pre-check: is this file already shared? Surface it prominently so the
+      // user isn't confused about state. They can still reshare to change
+      // mode/expiry/permission.
+      let existingDoc = sharedFilesProvider.getCurrentDocument();
+      if (!existingDoc) {
+        // Shared Files view may not yet be loaded for this repo — fetch inline.
+        try {
+          const octokitPre = await api.getOctokit();
+          const pre = await octokitPre.repos.getContent({
+            owner: repoInfo.owner,
+            repo: repoInfo.repo,
+            path: '.mdcolab/sharing.json',
+            ref: repoInfo.branch,
+          });
+          if (!Array.isArray(pre.data) && pre.data.type === 'file' && pre.data.content) {
+            const parsed = JSON.parse(
+              Buffer.from(pre.data.content, 'base64').toString('utf-8')
+            ) as { documents?: Record<string, any> };
+            existingDoc = parsed.documents?.[relativePath] ?? null;
+          }
+        } catch {
+          /* 404 or permission — treat as not shared */
+        }
+      }
+      if (existingDoc) {
+        const cfg0 = vscode.workspace.getConfiguration('mdcolab');
+        const baseUrl0 = cfg0.get<string>(
+          'webAppUrl',
+          'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io'
+        );
+        const url0 = buildMdcolabUrl(repoInfo, relativePath, baseUrl0);
+        const fileName0 = relativePath.split('/').pop() ?? relativePath;
+        const modeLabel0 =
+          existingDoc.mode === 'anyone_with_link'
+            ? 'anyone with the link'
+            : `${existingDoc.users?.length ?? 0} specific user${
+                existingDoc.users?.length === 1 ? '' : 's'
+              }`;
+        const expLabel = existingDoc.expiresAt
+          ? `expires ${new Date(existingDoc.expiresAt).toLocaleDateString()}`
+          : 'no expiration';
+        const choice = await vscode.window.showInformationMessage(
+          `Already shared with ${modeLabel0} (${expLabel}).`,
+          'Copy link',
+          'Update sharing',
+          'Stop sharing'
+        );
+        if (choice === 'Copy link' || choice === undefined) {
+          await vscode.env.clipboard.writeText(`[${fileName0}](${url0})`);
+          if (choice === 'Copy link') {
+            vscode.window.showInformationMessage('Link copied to clipboard.');
+          }
+          return;
+        }
+        if (choice === 'Stop sharing') {
+          await vscode.commands.executeCommand('mdcolab.unshareFile', {
+            filePath: relativePath,
+            repoContext: {
+              owner: repoInfo.owner,
+              repo: repoInfo.repo,
+              branch: repoInfo.branch,
+            },
+          });
+          return;
+        }
+        // else fall through to prompts and overwrite
+      }
 
       // --- Interactive share configuration (matches the web app) ---
       type SharingMode = 'anyone_with_link' | 'specific_people';
@@ -306,6 +394,9 @@ export async function activate(context: vscode.ExtensionContext) {
         const fileName = relativePath.split('/').pop() ?? relativePath;
         await vscode.env.clipboard.writeText(`[${fileName}](${url})`);
 
+        // Refresh the Shared Files view so the new entry appears.
+        sharedFilesProvider.refresh().catch(() => { /* best-effort */ });
+
         const modeLabel = mode === 'anyone_with_link' ? 'Anyone with the link' : `${users.length} user${users.length === 1 ? '' : 's'}`;
         const permLabel = allowEditing ? 'can edit' : 'view/comment';
         vscode.window.showInformationMessage(
@@ -371,16 +462,136 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Refresh Shared Files
+  context.subscriptions.push(
+    vscode.commands.registerCommand('mdcolab.refreshSharedFiles', () =>
+      sharedFilesProvider.refresh()
+    )
+  );
+
+  // Open Shared File (tree item click)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'mdcolab.openSharedFile',
+      async (item?: SharedFileItem) => {
+        if (!item) { return; }
+        // Prefer opening the local file if the repo is checked out, so the
+        // user can edit/comment in-place. Fall back to opening the web URL.
+        const localMatch =
+          currentRepoInfo &&
+          currentRepoInfo.owner === item.repoContext.owner &&
+          currentRepoInfo.repo === item.repoContext.repo
+            ? vscode.Uri.joinPath(
+                vscode.Uri.file(currentRepoInfo.rootPath),
+                ...item.filePath.split('/')
+              )
+            : null;
+        if (localMatch) {
+          try {
+            const doc = await vscode.workspace.openTextDocument(localMatch);
+            await vscode.window.showTextDocument(doc);
+            return;
+          } catch {
+            // Fall through to web URL
+          }
+        }
+        const cfg = vscode.workspace.getConfiguration('mdcolab');
+        const baseUrl = cfg.get<string>(
+          'webAppUrl',
+          'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io'
+        );
+        const url = buildMdcolabUrl(
+          { ...item.repoContext, rootPath: '' } as RepoInfo,
+          item.filePath,
+          baseUrl
+        );
+        vscode.env.openExternal(vscode.Uri.parse(url));
+      }
+    )
+  );
+
+  // Unshare (stop sharing) from the Shared Files view
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'mdcolab.unshareFile',
+      async (item?: SharedFileItem) => {
+        if (!item) { return; }
+        const confirm = await vscode.window.showWarningMessage(
+          `Stop sharing "${item.filePath}"?`,
+          { modal: true },
+          'Stop sharing'
+        );
+        if (confirm !== 'Stop sharing') { return; }
+        try {
+          const octokit = await api.getOctokit();
+          const sharingPath = '.mdcolab/sharing.json';
+          const { data } = await octokit.repos.getContent({
+            owner: item.repoContext.owner,
+            repo: item.repoContext.repo,
+            path: sharingPath,
+            ref: item.repoContext.branch,
+          });
+          if (Array.isArray(data) || data.type !== 'file' || !data.content) {
+            throw new Error('sharing.json not found');
+          }
+          const decoded = Buffer.from(data.content, 'base64').toString('utf-8');
+          const parsed = JSON.parse(decoded) as {
+            version?: number;
+            documents: Record<string, unknown>;
+          };
+          delete parsed.documents[item.filePath];
+          const remaining = Object.keys(parsed.documents).length;
+          if (remaining === 0) {
+            await octokit.repos.deleteFile({
+              owner: item.repoContext.owner,
+              repo: item.repoContext.repo,
+              path: sharingPath,
+              message: 'docs: remove sharing config',
+              sha: data.sha,
+              branch: item.repoContext.branch,
+            });
+          } else {
+            await octokit.repos.createOrUpdateFileContents({
+              owner: item.repoContext.owner,
+              repo: item.repoContext.repo,
+              path: sharingPath,
+              message: `docs: stop sharing ${item.filePath}`,
+              content: Buffer.from(
+                JSON.stringify(parsed, null, 2) + '\n'
+              ).toString('base64'),
+              sha: data.sha,
+              branch: item.repoContext.branch,
+            });
+          }
+          await sharedFilesProvider.refresh();
+          vscode.window.showInformationMessage(
+            `Stopped sharing ${item.filePath}`
+          );
+        } catch (err) {
+          vscode.window.showErrorMessage(
+            'Failed to unshare: ' + (err instanceof Error ? err.message : err)
+          );
+        }
+      }
+    )
+  );
+
   // --- Event listeners ---
 
   context.subscriptions.push(
-    vscode.window.onDidChangeActiveTextEditor(() => loadComments())
+    vscode.window.onDidChangeActiveTextEditor(() => {
+      loadComments().catch((err) =>
+        console.error('loadComments failed:', err)
+      );
+    })
   );
 
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((doc) => {
       if (doc.languageId === 'markdown') {
-        loadComments();
+        loadComments().catch((err) =>
+          console.error('loadComments failed:', err)
+        );
       }
     })
   );
@@ -389,12 +600,19 @@ export async function activate(context: vscode.ExtensionContext) {
   const config = vscode.workspace.getConfiguration('mdcolab');
   const interval = config.get<number>('autoRefreshInterval', 30);
   if (interval > 0) {
-    refreshTimer = setInterval(() => loadComments(), interval * 1000);
+    refreshTimer = setInterval(
+      () =>
+        loadComments().catch((err) =>
+          console.error('loadComments failed:', err)
+        ),
+      interval * 1000
+    );
     context.subscriptions.push({ dispose: () => clearInterval(refreshTimer) });
   }
 
-  // Initial load
-  await loadComments();
+  // Initial load — fire and forget so activate() returns promptly and all
+  // commands are immediately available from the tree view / palette.
+  loadComments().catch((err) => console.error('Initial loadComments failed:', err));
 }
 
 export function deactivate() {

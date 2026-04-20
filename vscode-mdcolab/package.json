@@ -2,7 +2,7 @@
   "name": "vscode-mdcolab",
   "displayName": "mdcolab",
   "description": "Collaborative markdown review with anchored comments via GitHub Issues",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "publisher": "charris-msft",
   "engines": {
     "vscode": "^1.85.0"
@@ -54,6 +54,23 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "mdcolab.refreshSharedFiles",
+        "title": "Refresh Shared Files",
+        "category": "mdcolab",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mdcolab.openSharedFile",
+        "title": "Open Shared File",
+        "category": "mdcolab"
+      },
+      {
+        "command": "mdcolab.unshareFile",
+        "title": "Stop Sharing",
+        "category": "mdcolab",
+        "icon": "$(trash)"
+      },
+      {
         "command": "mdcolab.resolveThread",
         "title": "Resolve Thread",
         "category": "mdcolab",
@@ -103,6 +120,11 @@
           "command": "mdcolab.refreshComments",
           "when": "view == mdcolab.commentsView",
           "group": "navigation"
+        },
+        {
+          "command": "mdcolab.refreshSharedFiles",
+          "when": "view == mdcolab.sharedFilesView",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -114,6 +136,11 @@
         {
           "command": "mdcolab.reopenThread",
           "when": "view == mdcolab.commentsView && viewItem == resolvedThread",
+          "group": "inline"
+        },
+        {
+          "command": "mdcolab.unshareFile",
+          "when": "view == mdcolab.sharedFilesView && (viewItem == sharedFile || viewItem == sharedFileExpired)",
           "group": "inline"
         }
       ]
@@ -133,6 +160,10 @@
           "id": "mdcolab.commentsView",
           "name": "Comments",
           "when": "resourceLangId == markdown || mdcolab.hasComments"
+        },
+        {
+          "id": "mdcolab.sharedFilesView",
+          "name": "Shared Files"
         }
       ]
     },
