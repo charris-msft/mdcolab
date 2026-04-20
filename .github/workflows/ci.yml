@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      # TODO: re-enable lint once the existing 174 lint errors in the repo
+      # (mostly in vscode-mdcolab/webview-ui) are addressed.
+      # - name: Lint
+      #   run: npm run lint
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Build-time env stubs so Next.js doesn't fail on missing runtime secrets.
+          NEXTAUTH_SECRET: ci-placeholder
+          NEXTAUTH_URL: http://localhost:3000
