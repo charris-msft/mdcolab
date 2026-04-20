@@ -127,48 +127,54 @@ export async function PUT(
     );
   }
 
-  // Read existing config
+  // Always read existing config so we don't clobber other documents.
+  // The client-provided SHA is only used as a concurrency hint for the write;
+  // we must still merge the new entry into the full existing document set.
   let config: SharingConfig = { version: 1, documents: {} };
-  let fileSha: string | undefined = existingSha;
+  let fileSha: string | undefined;
 
-  if (!fileSha) {
-    try {
-      const response = await octokit.repos.getContent({
-        owner,
-        repo,
-        path: SHARING_PATH,
-      });
+  try {
+    const response = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: SHARING_PATH,
+    });
 
-      const data = response.data;
-      if (!Array.isArray(data) && data.type === "file") {
-        const content = Buffer.from(data.content, "base64").toString("utf-8");
-        config = JSON.parse(content);
-        fileSha = data.sha;
-      }
-    } catch (error: unknown) {
-      const status = (error as { status?: number })?.status;
-      if (status === 403 && isAppConfigured()) {
-        // Fallback to installation token for reading
-        try {
-          const installationOctokit = await getInstallationOctokit(owner, repo);
-          const response = await installationOctokit.repos.getContent({
-            owner,
-            repo,
-            path: SHARING_PATH,
-          });
-
-          const data = response.data;
-          if (!Array.isArray(data) && data.type === "file") {
-            const content = Buffer.from(data.content, "base64").toString("utf-8");
-            config = JSON.parse(content);
-            fileSha = data.sha;
-          }
-        } catch {
-          // File doesn't exist — use empty config
-        }
-      }
-      // 404 means file doesn't exist — use empty config
+    const data = response.data;
+    if (!Array.isArray(data) && data.type === "file") {
+      const content = Buffer.from(data.content, "base64").toString("utf-8");
+      config = JSON.parse(content);
+      fileSha = data.sha;
     }
+  } catch (error: unknown) {
+    const status = (error as { status?: number })?.status;
+    if (status === 403 && isAppConfigured()) {
+      // Fallback to installation token for reading
+      try {
+        const installationOctokit = await getInstallationOctokit(owner, repo);
+        const response = await installationOctokit.repos.getContent({
+          owner,
+          repo,
+          path: SHARING_PATH,
+        });
+
+        const data = response.data;
+        if (!Array.isArray(data) && data.type === "file") {
+          const content = Buffer.from(data.content, "base64").toString("utf-8");
+          config = JSON.parse(content);
+          fileSha = data.sha;
+        }
+      } catch {
+        // File doesn't exist — use empty config
+      }
+    }
+    // 404 means file doesn't exist — use empty config
+  }
+
+  // Prefer the caller-supplied SHA when provided so optimistic-concurrency
+  // works across rapid successive mutations that share cached state.
+  if (existingSha) {
+    fileSha = existingSha;
   }
 
   // Update config — normalize path to decoded form to avoid URL-encoding mismatches
@@ -244,55 +250,57 @@ export async function DELETE(
     );
   }
 
-  // Read existing config
+  // Always read existing config so we don't clobber other documents.
   let config: SharingConfig = { version: 1, documents: {} };
-  let fileSha: string | undefined = existingSha;
+  let fileSha: string | undefined;
 
-  if (!fileSha) {
-    try {
-      const response = await octokit.repos.getContent({
-        owner,
-        repo,
-        path: SHARING_PATH,
-      });
+  try {
+    const response = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: SHARING_PATH,
+    });
 
-      const data = response.data;
-      if (!Array.isArray(data) && data.type === "file") {
-        const content = Buffer.from(data.content, "base64").toString("utf-8");
-        config = JSON.parse(content);
-        fileSha = data.sha;
-      }
-    } catch (error: unknown) {
-      const status = (error as { status?: number })?.status;
-      if (status === 404) {
+    const data = response.data;
+    if (!Array.isArray(data) && data.type === "file") {
+      const content = Buffer.from(data.content, "base64").toString("utf-8");
+      config = JSON.parse(content);
+      fileSha = data.sha;
+    }
+  } catch (error: unknown) {
+    const status = (error as { status?: number })?.status;
+    if (status === 404) {
+      return NextResponse.json(
+        { error: "No sharing config found" },
+        { status: 404 }
+      );
+    }
+    if (status === 403 && isAppConfigured()) {
+      try {
+        const installationOctokit = await getInstallationOctokit(owner, repo);
+        const response = await installationOctokit.repos.getContent({
+          owner,
+          repo,
+          path: SHARING_PATH,
+        });
+
+        const data = response.data;
+        if (!Array.isArray(data) && data.type === "file") {
+          const content = Buffer.from(data.content, "base64").toString("utf-8");
+          config = JSON.parse(content);
+          fileSha = data.sha;
+        }
+      } catch {
         return NextResponse.json(
           { error: "No sharing config found" },
           { status: 404 }
         );
       }
-      if (status === 403 && isAppConfigured()) {
-        try {
-          const installationOctokit = await getInstallationOctokit(owner, repo);
-          const response = await installationOctokit.repos.getContent({
-            owner,
-            repo,
-            path: SHARING_PATH,
-          });
-
-          const data = response.data;
-          if (!Array.isArray(data) && data.type === "file") {
-            const content = Buffer.from(data.content, "base64").toString("utf-8");
-            config = JSON.parse(content);
-            fileSha = data.sha;
-          }
-        } catch {
-          return NextResponse.json(
-            { error: "No sharing config found" },
-            { status: 404 }
-          );
-        }
-      }
     }
+  }
+
+  if (existingSha) {
+    fileSha = existingSha;
   }
 
   // Remove the document entry
