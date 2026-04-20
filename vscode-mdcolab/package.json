@@ -2,7 +2,7 @@
   "name": "vscode-mdcolab",
   "displayName": "mdcolab",
   "description": "Collaborative markdown review with anchored comments via GitHub Issues",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "charris-msft",
   "engines": {
     "vscode": "^1.85.0"
@@ -11,7 +11,9 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:markdown"
+    "onStartupFinished",
+    "onLanguage:markdown",
+    "onView:mdcolab.commentsView"
   ],
   "main": "./out/extension.js",
   "icon": "icon.png",
