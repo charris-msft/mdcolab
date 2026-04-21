@@ -2,7 +2,7 @@
   "name": "vscode-mdcolab",
   "displayName": "mdcolab",
   "description": "Collaborative markdown review with anchored comments via GitHub Issues",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "charris-msft",
   "engines": {
     "vscode": "^1.85.0"
@@ -197,8 +197,9 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run bundle",
     "compile": "tsc -p ./",
+    "bundle": "node esbuild.extension.mjs",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src",
     "test": "node ./out/test/runTest.js",

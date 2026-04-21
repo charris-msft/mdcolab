@@ -2,7 +2,9 @@
 .vscode-test/**
 src/**
 out/test/**
-node_modules/**
 .gitignore
 tsconfig.json
 *.map
+webview-ui/node_modules/**
+webview-ui/src/**
+*.vsix
