@@ -465,6 +465,87 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Save and push a shared file: save any dirty editor, git add/commit/push.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'mdcolab.saveAndPushFile',
+      async (item?: SharedFileItem) => {
+        if (!item) { return; }
+        const rootPath = item.repoContext.rootPath;
+        if (!rootPath) {
+          vscode.window.showErrorMessage(
+            'Local clone path not known; cannot push.'
+          );
+          return;
+        }
+        const absPath = vscode.Uri.file(
+          require('path').join(rootPath, ...item.filePath.split('/'))
+        );
+
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: `Saving and pushing ${item.filePath}…`,
+          },
+          async (progress) => {
+            try {
+              // 1. Save editor if dirty.
+              progress.report({ message: 'Saving…' });
+              const openDoc = vscode.workspace.textDocuments.find(
+                (d) =>
+                  d.uri.scheme === 'file' &&
+                  d.uri.fsPath.toLowerCase() === absPath.fsPath.toLowerCase()
+              );
+              if (openDoc && openDoc.isDirty) {
+                await openDoc.save();
+              }
+
+              const { execSync } = await import('child_process');
+              const run = (cmd: string) =>
+                execSync(cmd, {
+                  cwd: rootPath,
+                  encoding: 'utf-8',
+                  stdio: ['ignore', 'pipe', 'pipe'],
+                });
+
+              // 2. Stage.
+              progress.report({ message: 'Staging…' });
+              run(`git add -- "${item.filePath}"`);
+
+              // 3. Commit if there's anything staged for this file.
+              const staged = run(
+                `git diff --cached --name-only -- "${item.filePath}"`
+              ).trim();
+              if (staged.length > 0) {
+                progress.report({ message: 'Committing…' });
+                const fileName = item.filePath.split('/').pop() ?? item.filePath;
+                run(
+                  `git commit -m "docs: update ${fileName}" -- "${item.filePath}"`
+                );
+              }
+
+              // 4. Push (always, in case prior commits are unpushed).
+              progress.report({ message: 'Pushing…' });
+              run('git push');
+
+              vscode.window.showInformationMessage(
+                `Pushed ${item.filePath}.`
+              );
+            } catch (err: any) {
+              const stderr: string =
+                err?.stderr?.toString?.() ?? err?.message ?? String(err);
+              vscode.window.showErrorMessage(
+                `Save & push failed: ${stderr.trim()}`
+              );
+            } finally {
+              sharedFilesProvider.notifyStatusMayHaveChanged();
+            }
+          }
+        );
+      }
+    )
+  );
+
   // Enable private repo access (triggered from Shared Files info item)
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -622,6 +703,22 @@ export async function activate(context: vscode.ExtensionContext) {
           console.error('loadComments failed:', err)
         );
       }
+      // Saving a file may flip its unsaved/uncommitted status.
+      sharedFilesProvider.notifyStatusMayHaveChanged();
+    })
+  );
+
+  // A document becoming dirty/clean is reflected in the tree without a
+  // sharing.json refetch. Debounce since onDidChange fires per-keystroke.
+  let dirtyTimer: ReturnType<typeof setTimeout> | undefined;
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeTextDocument((e) => {
+      if (e.document.uri.scheme !== 'file') { return; }
+      if (dirtyTimer) { clearTimeout(dirtyTimer); }
+      dirtyTimer = setTimeout(
+        () => sharedFilesProvider.notifyStatusMayHaveChanged(),
+        400
+      );
     })
   );
 

@@ -2,7 +2,7 @@
   "name": "vscode-mdcolab",
   "displayName": "mdcolab",
   "description": "Collaborative markdown review with anchored comments via GitHub Issues",
-  "version": "0.3.5",
+  "version": "0.4.0",
   "publisher": "charris-msft",
   "engines": {
     "vscode": "^1.85.0"
@@ -69,6 +69,12 @@
         "title": "Stop Sharing",
         "category": "mdcolab",
         "icon": "$(trash)"
+      },
+      {
+        "command": "mdcolab.saveAndPushFile",
+        "title": "Save and Push",
+        "category": "mdcolab",
+        "icon": "$(cloud-upload)"
       },
       {
         "command": "mdcolab.enablePrivateRepoAccess",
@@ -144,9 +150,14 @@
           "group": "inline"
         },
         {
+          "command": "mdcolab.saveAndPushFile",
+          "when": "view == mdcolab.sharedFilesView && viewItem =~ /Dirty$/",
+          "group": "inline@1"
+        },
+        {
           "command": "mdcolab.unshareFile",
-          "when": "view == mdcolab.sharedFilesView && (viewItem == sharedFile || viewItem == sharedFileExpired)",
-          "group": "inline"
+          "when": "view == mdcolab.sharedFilesView && viewItem =~ /^sharedFile/",
+          "group": "inline@2"
         }
       ]
     },

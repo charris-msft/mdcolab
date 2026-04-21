@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as api from './github-api.js';
-import { getRepoInfo, RepoInfo } from './git-utils.js';
+import { getRepoInfo, getFileStatus, FileStatus, RepoInfo } from './git-utils.js';
 
 export interface SharingDocument {
   mode: 'anyone_with_link' | 'specific_people';
@@ -20,6 +20,7 @@ export interface RepoContext {
   owner: string;
   repo: string;
   branch: string;
+  rootPath?: string; // local clone path, if available
 }
 
 export class SharedFilesTreeProvider
@@ -72,12 +73,22 @@ export class SharedFilesTreeProvider
           owner: info.owner,
           repo: info.repo,
           branch: info.branch,
+          rootPath: info.rootPath,
         };
         this._onDidChangeTreeData.fire();
         void this.load();
         return;
       }
     }
+  }
+
+  /**
+   * Re-fire tree data without re-fetching sharing.json. Cheap — used to
+   * pick up changes in per-file dirty/uncommitted/unpushed status after
+   * editor save, document change, etc.
+   */
+  notifyStatusMayHaveChanged() {
+    this._onDidChangeTreeData.fire();
   }
 
   setCurrentFilePath(filePath: string | null) {
@@ -193,13 +204,15 @@ export class SharedFilesTreeProvider
       return [new InfoItem('No files shared yet', 'info')];
     }
     const now = Date.now();
+    const rootPath = this.repoContext.rootPath;
     return entries
       .sort(([a], [b]) => a.localeCompare(b))
       .map(
-        ([path, doc]) =>
-          new SharedFileItem(path, doc, this.repoContext!, {
-            isCurrent: path === this.currentFilePath,
+        ([p, doc]) =>
+          new SharedFileItem(p, doc, this.repoContext!, {
+            isCurrent: p === this.currentFilePath,
             isExpired: !!(doc.expiresAt && new Date(doc.expiresAt).getTime() <= now),
+            status: rootPath ? getFileStatus(rootPath, p) : undefined,
           })
       );
   }
@@ -208,19 +221,41 @@ export class SharedFilesTreeProvider
 export type SharedFilesItem = SharedFileItem | InfoItem;
 
 export class SharedFileItem extends vscode.TreeItem {
+  public readonly status?: FileStatus;
+
   constructor(
     public readonly filePath: string,
     public readonly doc: SharingDocument,
     public readonly repoContext: RepoContext,
-    opts: { isCurrent: boolean; isExpired: boolean }
+    opts: {
+      isCurrent: boolean;
+      isExpired: boolean;
+      status?: FileStatus;
+    }
   ) {
     super(filePath, vscode.TreeItemCollapsibleState.None);
+    this.status = opts.status;
 
     const fileName = filePath.split('/').pop() ?? filePath;
     this.label = fileName;
-    this.description = filePath.includes('/')
+    const dirName = filePath.includes('/')
       ? filePath.slice(0, filePath.lastIndexOf('/'))
-      : undefined;
+      : '';
+
+    // Status indicators: ● unsaved, ◆ uncommitted, ↑ unpushed.
+    const statusBits: string[] = [];
+    if (opts.status?.unsaved) { statusBits.push('● unsaved'); }
+    if (opts.status?.uncommitted) { statusBits.push('◆ uncommitted'); }
+    if (opts.status?.unpushed) { statusBits.push('↑ unpushed'); }
+    const statusLabel = statusBits.join('  ');
+
+    // Description pattern: "<dir>   <status>"
+    this.description =
+      dirName && statusLabel
+        ? `${dirName}   ${statusLabel}`
+        : statusLabel
+          ? statusLabel
+          : dirName || undefined;
 
     const modeLabel =
       doc.mode === 'anyone_with_link'
@@ -243,18 +278,39 @@ export class SharedFileItem extends vscode.TreeItem {
     if (doc.sharedBy) {
       tooltip.appendMarkdown(`- Shared by: @${doc.sharedBy}\n`);
     }
+    if (opts.status) {
+      if (!opts.status.exists) {
+        tooltip.appendMarkdown(`- Status: not in local clone\n`);
+      } else if (statusBits.length > 0) {
+        tooltip.appendMarkdown(`- Status: ${statusBits.join(', ')}\n`);
+      } else {
+        tooltip.appendMarkdown(`- Status: clean (saved, committed, pushed)\n`);
+      }
+    }
     this.tooltip = tooltip;
 
+    // Icon: expired > dirty > mode default. Colour in purple when current.
+    const isDirty =
+      !!opts.status &&
+      (opts.status.unsaved || opts.status.uncommitted || opts.status.unpushed);
+    const iconColor = opts.isCurrent
+      ? new vscode.ThemeColor('charts.purple')
+      : isDirty
+        ? new vscode.ThemeColor('gitDecoration.modifiedResourceForeground')
+        : undefined;
     this.iconPath = new vscode.ThemeIcon(
       opts.isExpired
         ? 'warning'
         : doc.mode === 'anyone_with_link'
           ? 'globe'
           : 'lock',
-      opts.isCurrent ? new vscode.ThemeColor('charts.purple') : undefined
+      iconColor
     );
 
-    this.contextValue = opts.isExpired ? 'sharedFileExpired' : 'sharedFile';
+    // contextValue drives which inline buttons show in view/item/context.
+    // `sharedFileDirty` adds the "save and push" icon; others remain.
+    const base = opts.isExpired ? 'sharedFileExpired' : 'sharedFile';
+    this.contextValue = isDirty && opts.status?.exists ? `${base}Dirty` : base;
 
     this.command = {
       command: 'mdcolab.openSharedFile',
