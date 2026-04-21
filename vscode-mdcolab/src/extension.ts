@@ -30,6 +30,9 @@ export async function activate(context: vscode.ExtensionContext) {
     treeDataProvider: sharedFilesProvider,
   });
   context.subscriptions.push(sharedFilesView);
+  // Populate from workspace folder regardless of active editor, so the view
+  // shows shared files as soon as the extension activates.
+  sharedFilesProvider.autoDetectFromWorkspace();
 
   // --- Load comments for current file ---
   async function loadComments() {

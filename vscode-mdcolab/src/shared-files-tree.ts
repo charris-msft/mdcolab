@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as api from './github-api.js';
+import { getRepoInfo, RepoInfo } from './git-utils.js';
 
 export interface SharingDocument {
   mode: 'anyone_with_link' | 'specific_people';
@@ -36,10 +37,47 @@ export class SharedFilesTreeProvider
   private currentFilePath: string | null = null;
 
   setContext(repoContext: RepoContext | null, currentFilePath: string | null) {
-    this.repoContext = repoContext;
+    // Don't lose the auto-detected repo context just because the user
+    // focused a non-markdown tab or a file outside the workspace.
+    const prev = this.repoContext;
+    if (repoContext) {
+      this.repoContext = repoContext;
+    }
     this.currentFilePath = currentFilePath;
     this._onDidChangeTreeData.fire();
-    void this.load();
+    const repoChanged =
+      !!repoContext &&
+      (!prev ||
+        prev.owner !== repoContext.owner ||
+        prev.repo !== repoContext.repo ||
+        prev.branch !== repoContext.branch);
+    if (repoChanged || (!prev && this.repoContext)) {
+      void this.load();
+    }
+  }
+
+  /**
+   * Detect the repo from the first workspace folder that is a GitHub clone.
+   * Called on activation so the view populates even if no markdown file is
+   * yet open (or if activation was triggered by opening the view itself).
+   */
+  autoDetectFromWorkspace() {
+    if (this.repoContext) { return; }
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    for (const folder of folders) {
+      const probe = vscode.Uri.joinPath(folder.uri, '.mdcolab');
+      const info: RepoInfo | null = getRepoInfo(probe);
+      if (info) {
+        this.repoContext = {
+          owner: info.owner,
+          repo: info.repo,
+          branch: info.branch,
+        };
+        this._onDidChangeTreeData.fire();
+        void this.load();
+        return;
+      }
+    }
   }
 
   setCurrentFilePath(filePath: string | null) {
