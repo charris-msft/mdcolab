@@ -59,6 +59,7 @@ export async function activate(context: vscode.ExtensionContext) {
         owner: currentRepoInfo.owner,
         repo: currentRepoInfo.repo,
         branch: currentRepoInfo.branch,
+        rootPath: currentRepoInfo.rootPath,
       },
       currentFilePath
     );
@@ -542,6 +543,106 @@ export async function activate(context: vscode.ExtensionContext) {
             }
           }
         );
+      }
+    )
+  );
+
+  // Helper to compute the mdcolab web URL for a shared-file item.
+  function mdcolabUrlFor(item: SharedFileItem): string {
+    const cfg = vscode.workspace.getConfiguration('mdcolab');
+    const baseUrl = cfg.get<string>(
+      'webAppUrl',
+      'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io'
+    );
+    return buildMdcolabUrl(
+      { ...item.repoContext, rootPath: item.repoContext.rootPath ?? '' } as RepoInfo,
+      item.filePath,
+      baseUrl
+    );
+  }
+
+  // Copy share link
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'mdcolab.copyShareLink',
+      async (item?: SharedFileItem) => {
+        if (!item) { return; }
+        const url = mdcolabUrlFor(item);
+        const fileName = item.filePath.split('/').pop() ?? item.filePath;
+        await vscode.env.clipboard.writeText(`[${fileName}](${url})`);
+        vscode.window.showInformationMessage('Share link copied.');
+      }
+    )
+  );
+
+  // Open shared file in browser (always web, never local)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'mdcolab.openSharedFileInBrowser',
+      async (item?: SharedFileItem) => {
+        if (!item) { return; }
+        vscode.env.openExternal(vscode.Uri.parse(mdcolabUrlFor(item)));
+      }
+    )
+  );
+
+  // Open shared file's GitHub blob page
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'mdcolab.openSharedFileOnGitHub',
+      async (item?: SharedFileItem) => {
+        if (!item) { return; }
+        const { owner, repo, branch } = item.repoContext;
+        const url = `https://github.com/${owner}/${repo}/blob/${branch}/${item.filePath}`;
+        vscode.env.openExternal(vscode.Uri.parse(url));
+      }
+    )
+  );
+
+  // Reveal the shared file in VS Code's file explorer
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'mdcolab.revealSharedFile',
+      async (item?: SharedFileItem) => {
+        if (!item) { return; }
+        const rootPath = item.repoContext.rootPath;
+        if (!rootPath) {
+          vscode.window.showWarningMessage(
+            'File not in a local clone — cannot reveal.'
+          );
+          return;
+        }
+        const abs = vscode.Uri.file(
+          require('path').join(rootPath, ...item.filePath.split('/'))
+        );
+        await vscode.commands.executeCommand('revealInExplorer', abs);
+      }
+    )
+  );
+
+  // Copy link to a comment thread (points at the GitHub issue)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'mdcolab.copyThreadLink',
+      async (item: any) => {
+        const issueNumber = item?.thread?.issueNumber;
+        if (!currentRepoInfo || !issueNumber) { return; }
+        const url = `https://github.com/${currentRepoInfo.owner}/${currentRepoInfo.repo}/issues/${issueNumber}`;
+        await vscode.env.clipboard.writeText(url);
+        vscode.window.showInformationMessage('Comment link copied.');
+      }
+    )
+  );
+
+  // Open a thread's issue on GitHub
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'mdcolab.openThreadOnGitHub',
+      async (item: any) => {
+        const issueNumber = item?.thread?.issueNumber;
+        if (!currentRepoInfo || !issueNumber) { return; }
+        const url = `https://github.com/${currentRepoInfo.owner}/${currentRepoInfo.repo}/issues/${issueNumber}`;
+        vscode.env.openExternal(vscode.Uri.parse(url));
       }
     )
   );

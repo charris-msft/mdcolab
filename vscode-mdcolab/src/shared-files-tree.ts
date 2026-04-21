@@ -42,7 +42,14 @@ export class SharedFilesTreeProvider
     // focused a non-markdown tab or a file outside the workspace.
     const prev = this.repoContext;
     if (repoContext) {
-      this.repoContext = repoContext;
+      // Preserve previously-known rootPath if the new context doesn't
+      // include one (e.g. loadComments may pass a RepoContext derived from
+      // a different source). Without rootPath we can't compute local file
+      // status, so clobbering it would silently disable dirty indicators.
+      this.repoContext = {
+        ...repoContext,
+        rootPath: repoContext.rootPath ?? prev?.rootPath,
+      };
     }
     this.currentFilePath = currentFilePath;
     this._onDidChangeTreeData.fire();

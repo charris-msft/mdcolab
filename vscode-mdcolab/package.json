@@ -2,7 +2,7 @@
   "name": "vscode-mdcolab",
   "displayName": "mdcolab",
   "description": "Collaborative markdown review with anchored comments via GitHub Issues",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "charris-msft",
   "engines": {
     "vscode": "^1.85.0"
@@ -92,6 +92,41 @@
         "title": "Reopen Thread",
         "category": "mdcolab",
         "icon": "$(issue-reopened)"
+      },
+      {
+        "command": "mdcolab.copyShareLink",
+        "title": "Copy Share Link",
+        "category": "mdcolab",
+        "icon": "$(link)"
+      },
+      {
+        "command": "mdcolab.openSharedFileInBrowser",
+        "title": "Open in mdcolab (Web)",
+        "category": "mdcolab",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "mdcolab.openSharedFileOnGitHub",
+        "title": "Open on GitHub",
+        "category": "mdcolab",
+        "icon": "$(github)"
+      },
+      {
+        "command": "mdcolab.revealSharedFile",
+        "title": "Reveal in Explorer",
+        "category": "mdcolab"
+      },
+      {
+        "command": "mdcolab.copyThreadLink",
+        "title": "Copy Comment Link",
+        "category": "mdcolab",
+        "icon": "$(link)"
+      },
+      {
+        "command": "mdcolab.openThreadOnGitHub",
+        "title": "Open Issue on GitHub",
+        "category": "mdcolab",
+        "icon": "$(github)"
       }
     ],
     "menus": {
@@ -150,6 +185,26 @@
           "group": "inline"
         },
         {
+          "command": "mdcolab.copyThreadLink",
+          "when": "view == mdcolab.commentsView && (viewItem == openThread || viewItem == resolvedThread)",
+          "group": "1_link@1"
+        },
+        {
+          "command": "mdcolab.openThreadOnGitHub",
+          "when": "view == mdcolab.commentsView && (viewItem == openThread || viewItem == resolvedThread)",
+          "group": "1_link@2"
+        },
+        {
+          "command": "mdcolab.resolveThread",
+          "when": "view == mdcolab.commentsView && viewItem == openThread",
+          "group": "2_modification@1"
+        },
+        {
+          "command": "mdcolab.reopenThread",
+          "when": "view == mdcolab.commentsView && viewItem == resolvedThread",
+          "group": "2_modification@1"
+        },
+        {
           "command": "mdcolab.saveAndPushFile",
           "when": "view == mdcolab.sharedFilesView && viewItem =~ /Dirty$/",
           "group": "inline@1"
@@ -158,6 +213,41 @@
           "command": "mdcolab.unshareFile",
           "when": "view == mdcolab.sharedFilesView && viewItem =~ /^sharedFile/",
           "group": "inline@2"
+        },
+        {
+          "command": "mdcolab.openSharedFile",
+          "when": "view == mdcolab.sharedFilesView && viewItem =~ /^sharedFile/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "mdcolab.openSharedFileInBrowser",
+          "when": "view == mdcolab.sharedFilesView && viewItem =~ /^sharedFile/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "mdcolab.openSharedFileOnGitHub",
+          "when": "view == mdcolab.sharedFilesView && viewItem =~ /^sharedFile/",
+          "group": "1_open@3"
+        },
+        {
+          "command": "mdcolab.revealSharedFile",
+          "when": "view == mdcolab.sharedFilesView && viewItem =~ /^sharedFile/",
+          "group": "1_open@4"
+        },
+        {
+          "command": "mdcolab.copyShareLink",
+          "when": "view == mdcolab.sharedFilesView && viewItem =~ /^sharedFile/",
+          "group": "2_link@1"
+        },
+        {
+          "command": "mdcolab.saveAndPushFile",
+          "when": "view == mdcolab.sharedFilesView && viewItem =~ /Dirty$/",
+          "group": "3_modification@1"
+        },
+        {
+          "command": "mdcolab.unshareFile",
+          "when": "view == mdcolab.sharedFilesView && viewItem =~ /^sharedFile/",
+          "group": "3_modification@2"
         }
       ]
     },
