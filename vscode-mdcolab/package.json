@@ -2,7 +2,7 @@
   "name": "vscode-mdcolab",
   "displayName": "mdcolab",
   "description": "Collaborative markdown review with anchored comments via GitHub Issues",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "publisher": "charris-msft",
   "engines": {
     "vscode": "^1.85.0"
@@ -163,8 +163,7 @@
       "mdcolab": [
         {
           "id": "mdcolab.commentsView",
-          "name": "Comments",
-          "when": "resourceLangId == markdown || mdcolab.hasComments"
+          "name": "Comments"
         },
         {
           "id": "mdcolab.sharedFilesView",
