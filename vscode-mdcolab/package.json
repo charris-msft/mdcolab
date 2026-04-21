@@ -2,7 +2,7 @@
   "name": "vscode-mdcolab",
   "displayName": "mdcolab",
   "description": "Collaborative markdown review with anchored comments via GitHub Issues",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "publisher": "charris-msft",
   "engines": {
     "vscode": "^1.85.0"
@@ -256,7 +256,7 @@
         {
           "id": "mdcolab",
           "title": "mdcolab",
-          "icon": "$(comment-discussion)"
+          "icon": "media/mdcolab-activity.svg"
         }
       ]
     },
