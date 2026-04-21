@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import * as api from './github-api.js';
 import { getRepoInfo, getFileStatus, FileStatus, RepoInfo } from './git-utils.js';
 
@@ -249,6 +250,19 @@ export class SharedFileItem extends vscode.TreeItem {
       ? filePath.slice(0, filePath.lastIndexOf('/'))
       : '';
 
+    // Pointing resourceUri at the actual local file lets VS Code's built-in
+    // SCM file decorations paint the filename in the standard "modified"
+    // colour and overlay the M/U/A badge — the same treatment users know
+    // from the Explorer. This survives long filenames because the colour is
+    // on the label itself, not a trailing description.
+    if (opts.status?.exists && repoContext.rootPath) {
+      const absPath = path.join(
+        repoContext.rootPath,
+        ...filePath.split('/')
+      );
+      this.resourceUri = vscode.Uri.file(absPath);
+    }
+
     // Status indicators: ● unsaved, ◆ uncommitted, ↑ unpushed.
     const statusBits: string[] = [];
     if (opts.status?.unsaved) { statusBits.push('● unsaved'); }
@@ -289,30 +303,41 @@ export class SharedFileItem extends vscode.TreeItem {
       if (!opts.status.exists) {
         tooltip.appendMarkdown(`- Status: not in local clone\n`);
       } else if (statusBits.length > 0) {
-        tooltip.appendMarkdown(`- Status: ${statusBits.join(', ')}\n`);
+        tooltip.appendMarkdown(`- Status: **${statusBits.join(', ')}**\n`);
+        tooltip.appendMarkdown(`\n_Action required: click ☁ to save & push_\n`);
       } else {
         tooltip.appendMarkdown(`- Status: clean (saved, committed, pushed)\n`);
       }
     }
     this.tooltip = tooltip;
 
-    // Icon: expired > dirty > mode default. Colour in purple when current.
+    // Dirty files get a prominent warning-triangle icon in the theme's
+    // warning colour. That overrides the mode glyph so it's impossible to
+    // miss, even when the filename is long and the description is
+    // truncated. Current-file purple tint takes precedence for clean files
+    // so the user can still see which one is active.
     const isDirty =
       !!opts.status &&
       (opts.status.unsaved || opts.status.uncommitted || opts.status.unpushed);
-    const iconColor = opts.isCurrent
-      ? new vscode.ThemeColor('charts.purple')
-      : isDirty
-        ? new vscode.ThemeColor('gitDecoration.modifiedResourceForeground')
-        : undefined;
-    this.iconPath = new vscode.ThemeIcon(
-      opts.isExpired
-        ? 'warning'
-        : doc.mode === 'anyone_with_link'
-          ? 'globe'
-          : 'lock',
-      iconColor
-    );
+
+    let icon: vscode.ThemeIcon;
+    if (opts.isExpired) {
+      icon = new vscode.ThemeIcon(
+        'warning',
+        new vscode.ThemeColor('charts.red')
+      );
+    } else if (isDirty) {
+      icon = new vscode.ThemeIcon(
+        'circle-large-filled',
+        new vscode.ThemeColor('editorWarning.foreground')
+      );
+    } else {
+      icon = new vscode.ThemeIcon(
+        doc.mode === 'anyone_with_link' ? 'globe' : 'lock',
+        opts.isCurrent ? new vscode.ThemeColor('charts.purple') : undefined
+      );
+    }
+    this.iconPath = icon;
 
     // contextValue drives which inline buttons show in view/item/context.
     // `sharedFileDirty` adds the "save and push" icon; others remain.
