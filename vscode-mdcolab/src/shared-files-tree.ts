@@ -106,11 +106,13 @@ export class SharedFilesTreeProvider
     this._onDidChangeTreeData.fire();
     try {
       const octokit = await api.getOctokit();
+      // Don't pin to the user's local branch — sharing.json lives on the
+      // repo's default branch; the caller's working branch may not contain
+      // the file at all. Omitting `ref` uses the default branch.
       const { data } = await octokit.repos.getContent({
         owner: this.repoContext.owner,
         repo: this.repoContext.repo,
         path: '.mdcolab/sharing.json',
-        ref: this.repoContext.branch,
       });
       if (!Array.isArray(data) && data.type === 'file' && data.content) {
         const decoded = Buffer.from(data.content, 'base64').toString('utf-8');
