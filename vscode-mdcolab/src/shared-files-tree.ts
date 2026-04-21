@@ -333,8 +333,7 @@ export class SharedFileItem extends vscode.TreeItem {
       );
     } else {
       icon = new vscode.ThemeIcon(
-        doc.mode === 'anyone_with_link' ? 'globe' : 'lock',
-        opts.isCurrent ? new vscode.ThemeColor('charts.purple') : undefined
+        doc.mode === 'anyone_with_link' ? 'globe' : 'lock'
       );
     }
     this.iconPath = icon;
