@@ -2,7 +2,7 @@
   "name": "vscode-mdcolab",
   "displayName": "mdcolab",
   "description": "Collaborative markdown review with anchored comments via GitHub Issues",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "publisher": "charris-msft",
   "engines": {
     "vscode": "^1.85.0"
@@ -69,6 +69,11 @@
         "title": "Stop Sharing",
         "category": "mdcolab",
         "icon": "$(trash)"
+      },
+      {
+        "command": "mdcolab.enablePrivateRepoAccess",
+        "title": "Enable Private Repo Access",
+        "category": "mdcolab"
       },
       {
         "command": "mdcolab.resolveThread",

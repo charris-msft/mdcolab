@@ -90,6 +90,8 @@ export class SharedFilesTreeProvider
     return this.config.documents[this.currentFilePath] ?? null;
   }
 
+  private needsPrivateAccess = false;
+
   async refresh() {
     await this.load();
   }
@@ -103,6 +105,7 @@ export class SharedFilesTreeProvider
     }
     this.loading = true;
     this.loadError = null;
+    this.needsPrivateAccess = false;
     this._onDidChangeTreeData.fire();
     try {
       const octokit = await api.getOctokit();
@@ -122,7 +125,33 @@ export class SharedFilesTreeProvider
       }
     } catch (err: any) {
       if (err?.status === 404) {
-        this.config = { documents: {} };
+        // A 404 under `public_repo` scope could mean either "the file does
+        // not exist" OR "the whole repo is private and invisible to us".
+        // Disambiguate by probing the repo itself. If that also 404s and
+        // the user hasn't granted `repo` scope yet, tell them how to fix it.
+        const hasPrivate = vscode.workspace
+          .getConfiguration('mdcolab')
+          .get<boolean>('privateRepoAccess', false);
+        if (!hasPrivate) {
+          try {
+            const octokit = await api.getOctokit();
+            await octokit.repos.get({
+              owner: this.repoContext.owner,
+              repo: this.repoContext.repo,
+            });
+            // Repo is visible → file genuinely doesn't exist.
+            this.config = { documents: {} };
+          } catch (probeErr: any) {
+            if (probeErr?.status === 404) {
+              this.needsPrivateAccess = true;
+              this.config = null;
+            } else {
+              this.config = { documents: {} };
+            }
+          }
+        } else {
+          this.config = { documents: {} };
+        }
       } else {
         this.config = null;
         this.loadError = err instanceof Error ? err.message : String(err);
@@ -147,6 +176,17 @@ export class SharedFilesTreeProvider
     }
     if (this.loadError) {
       return [new InfoItem(`Failed to load: ${this.loadError}`, 'error')];
+    }
+    if (this.needsPrivateAccess) {
+      const item = new InfoItem(
+        'Private repo — click to grant access',
+        'lock'
+      );
+      item.command = {
+        command: 'mdcolab.enablePrivateRepoAccess',
+        title: 'Enable private repo access',
+      };
+      return [item];
     }
     const entries = Object.entries(this.config?.documents ?? {});
     if (entries.length === 0) {

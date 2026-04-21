@@ -465,6 +465,32 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Enable private repo access (triggered from Shared Files info item)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'mdcolab.enablePrivateRepoAccess',
+      async () => {
+        await vscode.workspace
+          .getConfiguration('mdcolab')
+          .update(
+            'privateRepoAccess',
+            true,
+            vscode.ConfigurationTarget.Global
+          );
+        // Force a fresh auth session with the wider `repo` scope.
+        try {
+          await vscode.authentication.getSession('github', ['repo'], {
+            createIfNone: true,
+          });
+        } catch {
+          /* user cancelled — refresh will show error next time */
+        }
+        await sharedFilesProvider.refresh();
+        loadComments().catch(() => { /* best effort */ });
+      }
+    )
+  );
+
   // Refresh Shared Files
   context.subscriptions.push(
     vscode.commands.registerCommand('mdcolab.refreshSharedFiles', () =>
