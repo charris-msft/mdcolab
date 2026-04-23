@@ -7,6 +7,7 @@ import {
   SharedFilesTreeProvider,
   SharedFileItem,
 } from './shared-files-tree.js';
+import { MdcolabEditorPanel } from './mdcolab-editor-panel.js';
 
 // State
 let currentThreads: api.CommentThread[] = [];
@@ -82,6 +83,18 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // --- Register commands ---
 
+  // Open WYSIWYG Editor
+  context.subscriptions.push(
+    vscode.commands.registerCommand('mdcolab.openWysiwygEditor', (uri?: vscode.Uri) => {
+      const fileUri = uri ?? vscode.window.activeTextEditor?.document.uri;
+      if (!fileUri) {
+        vscode.window.showWarningMessage('Open a markdown file first');
+        return;
+      }
+      MdcolabEditorPanel.open(context.extensionUri, fileUri);
+    })
+  );
+
   // Add Comment
   context.subscriptions.push(
     vscode.commands.registerCommand('mdcolab.addComment', async () => {
@@ -141,7 +154,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       const config = vscode.workspace.getConfiguration('mdcolab');
-      const baseUrl = config.get<string>('webAppUrl', 'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io');
+      const baseUrl = config.get<string>('webAppUrl', 'https://ca-web-ai-preview.calmflower-64b2252f.eastus2.azurecontainerapps.io');
       const url = buildMdcolabUrl(currentRepoInfo, currentFilePath, baseUrl);
       vscode.env.openExternal(vscode.Uri.parse(url));
     })
@@ -155,11 +168,9 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       const config = vscode.workspace.getConfiguration('mdcolab');
-      const baseUrl = config.get<string>('webAppUrl', 'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io');
+      const baseUrl = config.get<string>('webAppUrl', 'https://ca-web-ai-preview.calmflower-64b2252f.eastus2.azurecontainerapps.io');
       const url = buildMdcolabUrl(currentRepoInfo, currentFilePath, baseUrl);
-      const fileName = currentFilePath.split('/').pop() ?? currentFilePath;
-      const markdownLink = `[${fileName}](${url})`;
-      await vscode.env.clipboard.writeText(markdownLink);
+      await vscode.env.clipboard.writeText(url);
       vscode.window.showInformationMessage('mdcolab link copied to clipboard!');
     })
   );
@@ -211,7 +222,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const cfg0 = vscode.workspace.getConfiguration('mdcolab');
         const baseUrl0 = cfg0.get<string>(
           'webAppUrl',
-          'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io'
+          'https://ca-web-ai-preview.calmflower-64b2252f.eastus2.azurecontainerapps.io'
         );
         const url0 = buildMdcolabUrl(repoInfo, relativePath, baseUrl0);
         const fileName0 = relativePath.split('/').pop() ?? relativePath;
@@ -392,11 +403,10 @@ export async function activate(context: vscode.ExtensionContext) {
         const cfg = vscode.workspace.getConfiguration('mdcolab');
         const baseUrl = cfg.get<string>(
           'webAppUrl',
-          'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io'
+          'https://ca-web-ai-preview.calmflower-64b2252f.eastus2.azurecontainerapps.io'
         );
         const url = buildMdcolabUrl(repoInfo, relativePath, baseUrl);
-        const fileName = relativePath.split('/').pop() ?? relativePath;
-        await vscode.env.clipboard.writeText(`[${fileName}](${url})`);
+        await vscode.env.clipboard.writeText(url);
 
         // Refresh the Shared Files view so the new entry appears.
         sharedFilesProvider.refresh().catch(() => { /* best-effort */ });
@@ -552,7 +562,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const cfg = vscode.workspace.getConfiguration('mdcolab');
     const baseUrl = cfg.get<string>(
       'webAppUrl',
-      'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io'
+      'https://ca-web-ai-preview.calmflower-64b2252f.eastus2.azurecontainerapps.io'
     );
     return buildMdcolabUrl(
       { ...item.repoContext, rootPath: item.repoContext.rootPath ?? '' } as RepoInfo,
@@ -568,8 +578,7 @@ export async function activate(context: vscode.ExtensionContext) {
       async (item?: SharedFileItem) => {
         if (!item) { return; }
         const url = mdcolabUrlFor(item);
-        const fileName = item.filePath.split('/').pop() ?? item.filePath;
-        await vscode.env.clipboard.writeText(`[${fileName}](${url})`);
+        await vscode.env.clipboard.writeText(url);
         vscode.window.showInformationMessage('Share link copied.');
       }
     )
@@ -709,7 +718,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const cfg = vscode.workspace.getConfiguration('mdcolab');
         const baseUrl = cfg.get<string>(
           'webAppUrl',
-          'https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io'
+          'https://ca-web-ai-preview.calmflower-64b2252f.eastus2.azurecontainerapps.io'
         );
         const url = buildMdcolabUrl(
           { ...item.repoContext, rootPath: '' } as RepoInfo,

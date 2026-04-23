@@ -2,7 +2,7 @@
   "name": "vscode-mdcolab",
   "displayName": "mdcolab",
   "description": "Collaborative markdown review with anchored comments via GitHub Issues",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "publisher": "charris-msft",
   "engines": {
     "vscode": "^1.85.0"
@@ -23,6 +23,12 @@
   },
   "contributes": {
     "commands": [
+      {
+        "command": "mdcolab.openWysiwygEditor",
+        "title": "Edit in WYSIWYG Editor",
+        "category": "mdcolab",
+        "icon": "$(open-preview)"
+      },
       {
         "command": "mdcolab.addComment",
         "title": "Add mdcolab Comment",
@@ -132,6 +138,11 @@
     "menus": {
       "editor/context": [
         {
+          "command": "mdcolab.openWysiwygEditor",
+          "when": "resourceLangId == markdown",
+          "group": "mdcolab@0"
+        },
+        {
           "command": "mdcolab.addComment",
           "when": "editorHasSelection && resourceLangId == markdown",
           "group": "mdcolab"
@@ -149,12 +160,22 @@
       ],
       "explorer/context": [
         {
+          "command": "mdcolab.openWysiwygEditor",
+          "when": "resourceLangId == markdown",
+          "group": "mdcolab@0"
+        },
+        {
           "command": "mdcolab.shareWithMdcolab",
           "when": "resourceLangId == markdown",
           "group": "mdcolab"
         }
       ],
       "editor/title": [
+        {
+          "command": "mdcolab.openWysiwygEditor",
+          "when": "resourceLangId == markdown",
+          "group": "navigation"
+        },
         {
           "command": "mdcolab.refreshComments",
           "when": "resourceLangId == markdown",
@@ -285,7 +306,7 @@
       "properties": {
         "mdcolab.webAppUrl": {
           "type": "string",
-          "default": "https://ca-web-v6zqqr2u3p5du.calmflower-64b2252f.eastus2.azurecontainerapps.io",
+          "default": "https://ca-web-ai-preview.calmflower-64b2252f.eastus2.azurecontainerapps.io",
           "description": "Base URL for the mdcolab web application"
         },
         "mdcolab.autoRefreshInterval": {
