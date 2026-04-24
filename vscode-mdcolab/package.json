@@ -2,7 +2,7 @@
   "name": "vscode-mdcolab",
   "displayName": "mdcolab",
   "description": "Collaborative markdown review with anchored comments via GitHub Issues",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "publisher": "charris-msft",
   "engines": {
     "vscode": "^1.85.0"

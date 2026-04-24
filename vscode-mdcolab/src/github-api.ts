@@ -121,12 +121,13 @@ export async function fetchCommentThreads(owner: string, repo: string, filePath:
     console.error('Failed to fetch mdcolab comments:', err);
   }
 
-  // If no results by label, try search API
+  // If no results by label, try search API (still requiring the mdcolab label
+  // so users can hide an issue from the extension by removing the label).
   if (threads.length === 0) {
     try {
       const searchOctokit = await getOctokit();
       const { data } = await searchOctokit.search.issuesAndPullRequests({
-        q: `repo:${owner}/${repo} is:issue "[mdcolab]" in:title`,
+        q: `repo:${owner}/${repo} is:issue label:${LABEL} "[mdcolab]" in:title`,
         per_page: 100,
       });
       for (const item of data.items) {
