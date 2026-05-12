@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { relativeTime } from "@/lib/time";
 import { renderMentions } from "@/lib/render-mentions";
 import { CommentReplyInput } from "./comment-reply-input";
 import { SuggestedEditView } from "./suggested-edit-view";
-import { Check, MessageSquare, RotateCcw, Megaphone, Loader2, ExternalLink } from "lucide-react";
+import { Check, MessageSquare, RotateCcw, Megaphone, Loader2, ExternalLink, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { getGuestAnonId, setGuestDisplayName } from "@/lib/friendly-names";
 import type { CommentThread, Comment } from "@/types";
 
 export interface CommentThreadCardProps {
@@ -44,6 +45,8 @@ function CommentItem({
   canResolve,
   onAccept,
   onReject,
+  owner,
+  repo,
 }: {
   comment: Comment;
   isReply: boolean;
@@ -51,7 +54,68 @@ function CommentItem({
   canResolve?: boolean;
   onAccept?: () => void;
   onReject?: () => void;
+  owner?: string;
+  repo?: string;
 }) {
+  const [currentAnonId, setCurrentAnonId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [renaming, setRenaming] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setCurrentAnonId(getGuestAnonId());
+    }
+  }, []);
+
+  const isOwnAnonComment =
+    comment.author.isAnonymous &&
+    comment.author.anonId &&
+    currentAnonId &&
+    comment.author.anonId === currentAnonId;
+
+  const displayLabel = comment.author.isAnonymous
+    ? (comment.author.displayName ?? "Anonymous")
+    : `@${comment.author.login}`;
+
+  const handleSaveName = useCallback(async () => {
+    const newName = nameDraft.trim();
+    if (!newName || !comment.author.anonId || !owner || !repo) {
+      setEditingName(false);
+      return;
+    }
+    if (newName === comment.author.displayName) {
+      setEditingName(false);
+      return;
+    }
+    setRenaming(true);
+    try {
+      // Update local storage immediately so future comments use the new name
+      setGuestDisplayName(newName);
+
+      const res = await fetch(`/api/comments/rename/${owner}/${repo}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          anonId: comment.author.anonId,
+          newDisplayName: newName,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Rename failed");
+      }
+      const result = await res.json();
+      toast.success(`Renamed in ${result.total} comment(s)`);
+      setEditingName(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Rename failed");
+    } finally {
+      setRenaming(false);
+    }
+  }, [nameDraft, comment.author.anonId, comment.author.displayName, owner, repo]);
+
   return (
     <div className={isReply ? "ml-6 mt-3" : "mt-3"}>
       <div className="flex items-center gap-2">
@@ -64,7 +128,45 @@ function CommentItem({
             {(comment.author.displayName ?? comment.author.login ?? "A")[0]?.toUpperCase()}
           </AvatarFallback>
         </Avatar>
-        <span className="text-sm font-medium">{comment.author.isAnonymous ? (comment.author.displayName ?? "Anonymous") : `@${comment.author.login}`}</span>
+        {editingName ? (
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleSaveName();
+                }
+                if (e.key === "Escape") {
+                  setEditingName(false);
+                }
+              }}
+              disabled={renaming}
+              className="text-sm font-medium px-2 py-0.5 rounded border border-border bg-background text-foreground outline-none focus:border-primary/50"
+            />
+            <Button size="sm" variant="ghost" onClick={handleSaveName} disabled={renaming}>
+              {renaming ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+            </Button>
+          </div>
+        ) : isOwnAnonComment ? (
+          <button
+            type="button"
+            className="text-sm font-medium hover:bg-accent rounded px-1 -mx-1 inline-flex items-center gap-1 group"
+            onClick={() => {
+              setNameDraft(comment.author.displayName ?? "");
+              setEditingName(true);
+            }}
+            title="Click to edit your display name (updates all your comments)"
+          >
+            {displayLabel}
+            <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+          </button>
+        ) : (
+          <span className="text-sm font-medium">{displayLabel}</span>
+        )}
         <span className="text-xs text-muted-foreground">
           {relativeTime(comment.createdAt)}
         </span>
@@ -260,6 +362,8 @@ export function CommentThreadCard({
             canResolve={thread.status === "open"}
             onAccept={() => onAcceptSuggestion?.(thread.id, comment.id)}
             onReject={() => onRejectSuggestion?.(thread.id, comment.id)}
+            owner={owner}
+            repo={repo}
           />
         ))}
 

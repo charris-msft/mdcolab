@@ -127,7 +127,7 @@ export class SharedFilesTreeProvider
     this.needsPrivateAccess = false;
     this._onDidChangeTreeData.fire();
     try {
-      const octokit = await api.getOctokit();
+      const octokit = await api.getOctokit(this.repoContext.owner);
       // Don't pin to the user's local branch — sharing.json lives on the
       // repo's default branch; the caller's working branch may not contain
       // the file at all. Omitting `ref` uses the default branch.
@@ -153,8 +153,8 @@ export class SharedFilesTreeProvider
           .get<boolean>('privateRepoAccess', false);
         if (!hasPrivate) {
           try {
-            const octokit = await api.getOctokit();
-            await octokit.repos.get({
+            const octokit2 = await api.getOctokit(this.repoContext.owner);
+            await octokit2.repos.get({
               owner: this.repoContext.owner,
               repo: this.repoContext.repo,
             });

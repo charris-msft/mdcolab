@@ -33,10 +33,78 @@ export interface CommentReply {
   createdAt: string;
 }
 
-export async function getOctokit(): Promise<Octokit> {
+/**
+ * Org → GitHub account mapping for multi-account support.
+ * When the repo owner matches an org key, we request a session for that specific account.
+ */
+interface OrgAccountMapping {
+  org: string;
+  account: string;
+}
+
+function getOrgAccountMappings(): OrgAccountMapping[] {
+  const config = vscode.workspace.getConfiguration('mdcolab');
+  const mappings = config.get<Array<{ org: string; account: string }>>('orgAccountMappings', []);
+  return mappings;
+}
+
+/**
+ * Get an authenticated Octokit instance.
+ * When `owner` is provided and matches an org-account mapping, requests a session
+ * for the mapped GitHub account. Otherwise uses the default account.
+ */
+export async function getOctokit(owner?: string): Promise<Octokit> {
   const usePrivate = vscode.workspace.getConfiguration('mdcolab').get<boolean>('privateRepoAccess', false);
   const scopes = usePrivate ? ['repo'] : ['public_repo'];
-  const session = await vscode.authentication.getSession('github', scopes, { createIfNone: true });
+
+  // Check if this owner requires a specific account
+  let sessionOptions: { createIfNone: true; account?: { id: string; label: string } } = { createIfNone: true };
+
+  if (owner) {
+    const mappings = getOrgAccountMappings();
+    const mapping = mappings.find((m) => m.org.toLowerCase() === owner.toLowerCase());
+    if (mapping) {
+      // Try to find an existing session for this account
+      const existingSessions = await vscode.authentication.getSession('github', scopes, { createIfNone: false });
+      if (existingSessions && existingSessions.account.label.toLowerCase() === mapping.account.toLowerCase()) {
+        return new Octokit({ auth: existingSessions.accessToken });
+      }
+
+      // Prompt for the right account
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await vscode.authentication.getSession('github', scopes, {
+          createIfNone: true,
+          account: { id: mapping.account, label: mapping.account },
+        });
+      } catch {
+        session = undefined;
+      }
+
+      if (session) {
+        return new Octokit({ auth: session.accessToken });
+      }
+
+      // Fall back to prompting user
+      const choice = await vscode.window.showWarningMessage(
+        `The repo "${owner}" requires the "${mapping.account}" GitHub account. Please sign into VS Code with that account.`,
+        'Sign In',
+        'Continue Anyway',
+      );
+      if (choice === 'Sign In') {
+        const newSession = await vscode.authentication.getSession('github', scopes, {
+          createIfNone: true,
+          forceNewSession: { detail: `Sign in with your "${mapping.account}" account for ${owner} org access.` },
+        });
+        if (newSession) {
+          return new Octokit({ auth: newSession.accessToken });
+        }
+      }
+    }
+  }
+
+  // Default: use whatever account is signed in
+  const session = await vscode.authentication.getSession('github', scopes, sessionOptions);
   if (!session) {
     throw new Error('GitHub authentication required');
   }
@@ -66,7 +134,7 @@ export function buildIssueBody(anchor: CommentAnchor, commentBody: string, fileP
 }
 
 export async function fetchCommentThreads(owner: string, repo: string, filePath: string): Promise<CommentThread[]> {
-  const octokit = await getOctokit();
+  const octokit = await getOctokit(owner);
   const threads: CommentThread[] = [];
 
   // Try fetching by mdcolab label, then filter by file path in metadata
@@ -125,7 +193,7 @@ export async function fetchCommentThreads(owner: string, repo: string, filePath:
   // so users can hide an issue from the extension by removing the label).
   if (threads.length === 0) {
     try {
-      const searchOctokit = await getOctokit();
+      const searchOctokit = await getOctokit(owner);
       const { data } = await searchOctokit.search.issuesAndPullRequests({
         q: `repo:${owner}/${repo} is:issue label:${LABEL} "[mdcolab]" in:title`,
         per_page: 100,
@@ -166,7 +234,7 @@ export async function fetchCommentThreads(owner: string, repo: string, filePath:
 export async function createCommentThread(
   owner: string, repo: string, filePath: string, anchor: CommentAnchor, body: string
 ): Promise<CommentThread | null> {
-  const octokit = await getOctokit();
+  const octokit = await getOctokit(owner);
 
   // Best-effort label creation
   const labels: string[] = [];
@@ -209,7 +277,7 @@ export async function createCommentThread(
 }
 
 export async function replyToThread(owner: string, repo: string, issueNumber: number, body: string): Promise<CommentReply | null> {
-  const octokit = await getOctokit();
+  const octokit = await getOctokit(owner);
   const { data } = await octokit.issues.createComment({
     owner, repo, issue_number: issueNumber, body,
   });
@@ -222,11 +290,11 @@ export async function replyToThread(owner: string, repo: string, issueNumber: nu
 }
 
 export async function resolveThread(owner: string, repo: string, issueNumber: number): Promise<void> {
-  const octokit = await getOctokit();
+  const octokit = await getOctokit(owner);
   await octokit.issues.update({ owner, repo, issue_number: issueNumber, state: 'closed' });
 }
 
 export async function reopenThread(owner: string, repo: string, issueNumber: number): Promise<void> {
-  const octokit = await getOctokit();
+  const octokit = await getOctokit(owner);
   await octokit.issues.update({ owner, repo, issue_number: issueNumber, state: 'open' });
 }

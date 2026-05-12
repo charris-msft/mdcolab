@@ -8,6 +8,7 @@ import {
   SharedFileItem,
 } from './shared-files-tree.js';
 import { MdcolabEditorPanel } from './mdcolab-editor-panel.js';
+import { registerCopilotTools } from './copilot-tools.js';
 
 // State
 let currentThreads: api.CommentThread[] = [];
@@ -17,6 +18,9 @@ let refreshTimer: ReturnType<typeof setInterval> | undefined;
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log('mdcolab extension activated');
+
+  // Register Copilot language model tools
+  registerCopilotTools(context);
 
   // Create tree providers
   const treeProvider = new CommentsTreeProvider();
@@ -201,7 +205,7 @@ export async function activate(context: vscode.ExtensionContext) {
       if (!existingDoc) {
         // Shared Files view may not yet be loaded for this repo — fetch inline.
         try {
-          const octokitPre = await api.getOctokit();
+          const octokitPre = await api.getOctokit(repoInfo.owner);
           const pre = await octokitPre.repos.getContent({
             owner: repoInfo.owner,
             repo: repoInfo.repo,
@@ -242,7 +246,7 @@ export async function activate(context: vscode.ExtensionContext) {
           'Stop sharing'
         );
         if (choice === 'Copy link' || choice === undefined) {
-          await vscode.env.clipboard.writeText(`[${fileName0}](${url0})`);
+          await vscode.env.clipboard.writeText(url0);
           if (choice === 'Copy link') {
             vscode.window.showInformationMessage('Link copied to clipboard.');
           }
@@ -327,7 +331,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
       try {
         // Authenticate and get Octokit
-        const octokit = await api.getOctokit();
+        const octokit = await api.getOctokit(repoInfo.owner);
 
         // Identify the current user for sharedBy
         let sharedBy = 'unknown';
@@ -695,26 +699,40 @@ export async function activate(context: vscode.ExtensionContext) {
       'mdcolab.openSharedFile',
       async (item?: SharedFileItem) => {
         if (!item) { return; }
-        // Prefer opening the local file if the repo is checked out, so the
-        // user can edit/comment in-place. Fall back to opening the web URL.
-        const localMatch =
-          currentRepoInfo &&
+
+        // Try to resolve the local file path from the repo's known rootPath
+        // (or the currently active repo if it matches).
+        const rootPath =
+          item.repoContext.rootPath ||
+          (currentRepoInfo &&
           currentRepoInfo.owner === item.repoContext.owner &&
           currentRepoInfo.repo === item.repoContext.repo
-            ? vscode.Uri.joinPath(
-                vscode.Uri.file(currentRepoInfo.rootPath),
-                ...item.filePath.split('/')
-              )
-            : null;
-        if (localMatch) {
+            ? currentRepoInfo.rootPath
+            : undefined);
+
+        const isMarkdown = /\.(md|mdx)$/i.test(item.filePath);
+
+        if (rootPath) {
+          const localUri = vscode.Uri.file(
+            require('path').join(rootPath, ...item.filePath.split('/'))
+          );
           try {
-            const doc = await vscode.workspace.openTextDocument(localMatch);
-            await vscode.window.showTextDocument(doc);
+            // Verify the file actually exists locally before opening
+            await vscode.workspace.fs.stat(localUri);
+            if (isMarkdown) {
+              // Open in mdcolab WYSIWYG editor
+              MdcolabEditorPanel.open(context.extensionUri, localUri);
+            } else {
+              const doc = await vscode.workspace.openTextDocument(localUri);
+              await vscode.window.showTextDocument(doc);
+            }
             return;
           } catch {
-            // Fall through to web URL
+            // File not found locally — fall through to web URL
           }
         }
+
+        // Fall back to the web app
         const cfg = vscode.workspace.getConfiguration('mdcolab');
         const baseUrl = cfg.get<string>(
           'webAppUrl',
@@ -743,7 +761,7 @@ export async function activate(context: vscode.ExtensionContext) {
         );
         if (confirm !== 'Stop sharing') { return; }
         try {
-          const octokit = await api.getOctokit();
+          const octokit = await api.getOctokit(item.repoContext.owner);
           const sharingPath = '.mdcolab/sharing.json';
           const { data } = await octokit.repos.getContent({
             owner: item.repoContext.owner,

@@ -5,7 +5,7 @@
   "version": "0.4.6",
   "publisher": "charris-msft",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.116.0"
   },
   "categories": [
     "Other"
@@ -22,6 +22,145 @@
     "url": "https://github.com/charris-msft/mdcolab"
   },
   "contributes": {
+    "languageModelTools": [
+      {
+        "name": "mdcolab_addComment",
+        "tags": [
+          "mdcolab",
+          "comment",
+          "review",
+          "markdown"
+        ],
+        "toolReferenceName": "mdcolabAddComment",
+        "displayName": "Add mdcolab Comment",
+        "modelDescription": "Add a review comment anchored to specific text in the currently open markdown document. The comment is stored as a GitHub Issue. Use this when the user asks to add a comment on a specific word, phrase, or section.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "selectedText": {
+              "type": "string",
+              "description": "The exact text in the document to anchor the comment to. Must match text that exists in the document."
+            },
+            "body": {
+              "type": "string",
+              "description": "The comment body text."
+            }
+          },
+          "required": [
+            "selectedText",
+            "body"
+          ]
+        },
+        "canBeReferencedInPrompt": true
+      },
+      {
+        "name": "mdcolab_addGeneralComment",
+        "tags": [
+          "mdcolab",
+          "comment",
+          "review",
+          "markdown"
+        ],
+        "toolReferenceName": "mdcolabAddGeneralComment",
+        "displayName": "Add mdcolab General Comment",
+        "modelDescription": "Add a general document-level review comment not anchored to specific text. Use this when the user wants to comment on the document as a whole, not a specific phrase.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "body": {
+              "type": "string",
+              "description": "The comment body text."
+            }
+          },
+          "required": [
+            "body"
+          ]
+        },
+        "canBeReferencedInPrompt": true
+      },
+      {
+        "name": "mdcolab_listComments",
+        "tags": [
+          "mdcolab",
+          "comment",
+          "review",
+          "markdown"
+        ],
+        "toolReferenceName": "mdcolabListComments",
+        "displayName": "List mdcolab Comments",
+        "modelDescription": "List review comment threads on the currently open markdown document. Returns issue numbers, status, anchored text, and comment bodies. Use this to see what feedback exists on the document.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "open",
+                "resolved",
+                "all"
+              ],
+              "description": "Filter by comment status. Defaults to 'all'."
+            }
+          }
+        },
+        "canBeReferencedInPrompt": true
+      },
+      {
+        "name": "mdcolab_replyToComment",
+        "tags": [
+          "mdcolab",
+          "comment",
+          "review",
+          "markdown"
+        ],
+        "toolReferenceName": "mdcolabReplyToComment",
+        "displayName": "Reply to mdcolab Comment",
+        "modelDescription": "Reply to an existing review comment thread by issue number. Use this after listing comments to respond to specific feedback.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "issueNumber": {
+              "type": "number",
+              "description": "The GitHub Issue number of the comment thread to reply to."
+            },
+            "body": {
+              "type": "string",
+              "description": "The reply text."
+            }
+          },
+          "required": [
+            "issueNumber",
+            "body"
+          ]
+        },
+        "canBeReferencedInPrompt": true
+      },
+      {
+        "name": "mdcolab_resolveComment",
+        "tags": [
+          "mdcolab",
+          "comment",
+          "review",
+          "markdown"
+        ],
+        "toolReferenceName": "mdcolabResolveComment",
+        "displayName": "Resolve mdcolab Comment",
+        "modelDescription": "Resolve (close) a review comment thread by issue number. Use this when feedback has been addressed.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "issueNumber": {
+              "type": "number",
+              "description": "The GitHub Issue number of the comment thread to resolve."
+            }
+          },
+          "required": [
+            "issueNumber"
+          ]
+        },
+        "canBeReferencedInPrompt": true
+      }
+    ],
     "commands": [
       {
         "command": "mdcolab.openWysiwygEditor",
@@ -182,6 +321,28 @@
           "group": "navigation"
         }
       ],
+      "editor/title/context": [
+        {
+          "command": "mdcolab.openWysiwygEditor",
+          "when": "resourceLangId == markdown",
+          "group": "mdcolab@0"
+        },
+        {
+          "command": "mdcolab.openInMdcolab",
+          "when": "resourceLangId == markdown",
+          "group": "mdcolab@1"
+        },
+        {
+          "command": "mdcolab.shareLink",
+          "when": "resourceLangId == markdown",
+          "group": "mdcolab@2"
+        },
+        {
+          "command": "mdcolab.shareWithMdcolab",
+          "when": "resourceLangId == markdown",
+          "group": "mdcolab@3"
+        }
+      ],
       "view/title": [
         {
           "command": "mdcolab.refreshComments",
@@ -318,6 +479,25 @@
           "type": "boolean",
           "default": false,
           "description": "Request full repo scope for private repository access. When disabled, only public repositories are accessible (recommended for minimal permissions)."
+        },
+        "mdcolab.orgAccountMappings": {
+          "type": "array",
+          "default": [],
+          "description": "Map GitHub orgs to specific accounts. When working with a repo owned by a mapped org, mdcolab will request authentication with that account.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "org": {
+                "type": "string",
+                "description": "GitHub organization name (e.g. 'coreai-microsoft')"
+              },
+              "account": {
+                "type": "string",
+                "description": "GitHub account username to use for this org (e.g. 'charris_microsoft')"
+              }
+            },
+            "required": ["org", "account"]
+          }
         }
       }
     }
@@ -336,7 +516,7 @@
     "@types/mocha": "^10.0.0",
     "@types/node": "^20.0.0",
     "@types/sinon": "^21.0.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.116.0",
     "@vscode/test-electron": "^2.4.0",
     "@vscode/vsce": "^3.0.0",
     "glob": "^11.0.0",
@@ -345,6 +525,7 @@
     "typescript": "^5.5.0"
   },
   "dependencies": {
-    "@octokit/rest": "^20.1.2"
+    "@octokit/rest": "^20.1.2",
+    "mermaid": "^11.14.0"
   }
 }

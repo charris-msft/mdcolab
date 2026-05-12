@@ -16,7 +16,7 @@ import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { common, createLowlight } from "lowlight";
 import { Markdown } from "tiptap-markdown";
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { useEditorStore } from "@/stores/editor-store";
 import { useCommentCreation } from "@/hooks/use-comment-creation";
 import { useCommentAnchors } from "@/hooks/use-comment-anchors";
@@ -25,7 +25,18 @@ import { BubbleToolbar } from "./bubble-toolbar";
 import { SlashCommands } from "./slash-commands";
 import { CodeBlockComponent } from "./code-block-component";
 import { CommentMark } from "./extensions/comment-mark";
+import { MermaidCodeBlock } from "./extensions/mermaid-block";
 import { ReviewSelectionToolbar } from "./review-selection-toolbar";
+import { FindBar } from "./find-bar";
+import {
+  BlockIdExtension,
+  extractSourceBlocks,
+  extractFrontmatter,
+  DirtyTracker,
+  hybridSerialize,
+  type SourceBlock,
+} from "./hybrid-serialize";
+import { serializeClipboardText } from "./clipboard";
 import "@/components/editor/editor-styles.css";
 
 const lowlight = createLowlight(common);
@@ -47,6 +58,22 @@ export function DocumentEditor({
 }: DocumentEditorProps) {
   const { isDirty, setDirty, setContent, setEditable, setEditor, setSelectedText } = useEditorStore();
   const editorInteracted = useRef(false);
+  const [zoomLevel, setZoomLevel] = useState(100);
+  const [showFindBar, setShowFindBar] = useState(false);
+
+  // Hybrid serialize state
+  const dirtyTrackerRef = useRef(new DirtyTracker());
+  const sourceBlocksRef = useRef<SourceBlock[]>([]);
+  const originalMarkdownRef = useRef(initialContent);
+  const frontmatterRef = useRef("");
+
+  // Extract source map and frontmatter on initial load
+  useEffect(() => {
+    const { frontmatter, content } = extractFrontmatter(initialContent);
+    frontmatterRef.current = frontmatter;
+    originalMarkdownRef.current = content;
+    sourceBlocksRef.current = extractSourceBlocks(content, { html: false });
+  }, [initialContent]);
 
   const editor = useEditor({
     extensions: [
@@ -82,12 +109,12 @@ export function DocumentEditor({
         nested: true,
       }),
       HorizontalRule,
-      CodeBlockLowlight.configure({
+      MermaidCodeBlock.configure({
         lowlight,
       }),
       Markdown.configure({
         html: false,
-        transformCopiedText: true,
+        transformCopiedText: false,
         transformPastedText: true,
       }),
       CommentMark.configure({
@@ -95,6 +122,7 @@ export function DocumentEditor({
           class: "comment-highlight",
         },
       }),
+      BlockIdExtension,
       SlashCommands,
     ],
     content: initialContent,
@@ -104,15 +132,32 @@ export function DocumentEditor({
         class:
           "prose-editor outline-none min-h-[500px] px-4 py-8 mx-auto max-w-[720px]",
       },
+      clipboardTextSerializer: serializeClipboardText,
     },
     onCreate: ({ editor }) => {
       // Populate store with the editor's serialized markdown on first load
-      // so AI context and Apply Edit use the same source
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const markdown = (editor.storage as any).markdown?.getMarkdown?.() as string;
       if (markdown) {
         setContent(markdown);
       }
+
+      // Map blockIds to source blocks after the appendTransaction assigns them
+      requestAnimationFrame(() => {
+        const doc = editor.state.doc;
+        const blocks = sourceBlocksRef.current;
+        let blockIndex = 0;
+        doc.forEach((node) => {
+          const id = node.attrs.blockId;
+          if (id && blockIndex < blocks.length) {
+            blocks[blockIndex].blockId = id;
+            blockIndex++;
+          }
+        });
+        // Set initial clean IDs for dirty tracker
+        const cleanIds = blocks.filter((b) => b.blockId).map((b) => b.blockId!);
+        dirtyTrackerRef.current.setInitialCleanIds(cleanIds);
+      });
     },
     onUpdate: ({ editor }) => {
       // Skip marking dirty if editor hasn't been interacted with yet
@@ -122,6 +167,9 @@ export function DocumentEditor({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const markdown = (editor.storage as any).markdown.getMarkdown() as string;
       setContent(markdown);
+    },
+    onTransaction: ({ transaction }) => {
+      dirtyTrackerRef.current.onTransaction(transaction);
     },
     onSelectionUpdate: ({ editor }) => {
       const { from, to } = editor.state.selection;
@@ -156,25 +204,80 @@ export function DocumentEditor({
     }
   }, [editor, editable, setEditable]);
 
+  // Hybrid save: serialize only dirty blocks, keep original for clean blocks
+  const performHybridSave = useCallback(() => {
+    if (!editor) return;
+    const markdown = hybridSerialize({
+      editor,
+      originalMarkdown: originalMarkdownRef.current,
+      sourceBlocks: sourceBlocksRef.current,
+      dirtyTracker: dirtyTrackerRef.current,
+      frontmatter: frontmatterRef.current,
+    });
+    onSave?.(markdown);
+    // Reset dirty tracker and update baseline for next edit cycle
+    dirtyTrackerRef.current.reset(editor.state.doc);
+    const { frontmatter: fm, content: ct } = extractFrontmatter(markdown);
+    frontmatterRef.current = fm;
+    originalMarkdownRef.current = ct;
+    sourceBlocksRef.current = extractSourceBlocks(ct, { html: false });
+    // Re-map blockIds
+    let idx = 0;
+    editor.state.doc.forEach((node) => {
+      const id = node.attrs.blockId;
+      if (id && idx < sourceBlocksRef.current.length) {
+        sourceBlocksRef.current[idx].blockId = id;
+        idx++;
+      }
+    });
+  }, [editor, onSave]);
+
+  // Expose hybrid save for external callers (e.g. save button in page toolbar)
+  useEffect(() => {
+    if (editor) {
+      // Store the hybrid save function so the page can call it
+      useEditorStore.getState().setHybridSave?.(performHybridSave);
+    }
+  }, [editor, performHybridSave]);
+
   // Keyboard shortcut: Cmd+S to save, Ctrl+Alt+M to comment
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
         if (editor && isDirty) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const markdown = (editor.storage as any).markdown.getMarkdown() as string;
-          onSave?.(markdown);
+          performHybridSave();
         }
       }
       if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "m") {
         e.preventDefault();
         handleCreateComment();
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        setShowFindBar(true);
+      }
+      if (e.key === "Escape" && showFindBar) {
+        setShowFindBar(false);
+      }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [editor, isDirty, onSave, handleCreateComment]);
+  }, [editor, isDirty, onSave, handleCreateComment, showFindBar]);
+
+  // Ctrl+Scroll to zoom
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      setZoomLevel((prev) => {
+        const next = prev + (e.deltaY < 0 ? 10 : -10);
+        return Math.min(200, Math.max(50, next));
+      });
+    };
+    document.addEventListener("wheel", handleWheel, { passive: false });
+    return () => document.removeEventListener("wheel", handleWheel);
+  }, []);
 
   if (!editor) {
     return (
@@ -190,12 +293,24 @@ export function DocumentEditor({
   return (
     <div className={className}>
       {editable && <EditorToolbar editor={editor} />}
+      {showFindBar && <FindBar onClose={() => setShowFindBar(false)} />}
       {editable && <BubbleToolbar editor={editor} editable={editable} onCreateComment={handleCreateComment} />}
       {!editable && <ReviewSelectionToolbar editor={editor} onCreateComment={handleCreateComment} />}
       <CodeBlockComponent editor={editor} />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" style={{ zoom: zoomLevel / 100 }}>
         <EditorContent editor={editor} />
       </div>
+      {zoomLevel !== 100 && (
+        <div className="flex items-center justify-end px-3 py-1 border-t border-border bg-card text-xs text-muted-foreground">
+          <button
+            className="hover:text-foreground transition-colors"
+            onClick={() => setZoomLevel(100)}
+            title="Reset zoom"
+          >
+            {zoomLevel}% — click to reset
+          </button>
+        </div>
+      )}
     </div>
   );
 }

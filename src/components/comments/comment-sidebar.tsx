@@ -72,6 +72,15 @@ export function CommentSidebar({ hasIssues = true, canEdit = false }: { hasIssue
   } = useCommentStore();
 
   const content = useEditorStore((s) => s.content);
+  const editor = useEditorStore((s) => s.editor);
+
+  // Use the editor's rendered text content for accurate anchor sorting.
+  // The raw markdown contains formatting marks (e.g., **bold**) that won't
+  // match the plain text captured in selectedText.
+  const documentText = useMemo(() => {
+    if (editor) return editor.state.doc.textContent;
+    return content;
+  }, [editor, content]);
 
   const filteredThreads = useMemo(() => {
     return threads.filter((t) => {
@@ -112,16 +121,16 @@ export function CommentSidebar({ hasIssues = true, canEdit = false }: { hasIssue
 
   const textThreads = useMemo(() => {
     const filtered = filteredThreads.filter((t) => t.anchor.type === "text-range");
-    if (!content) return filtered;
+    if (!documentText) return filtered;
     return [...filtered].sort((a, b) => {
-      const posA = a.anchor.selectedText ? content.indexOf(a.anchor.selectedText) : -1;
-      const posB = b.anchor.selectedText ? content.indexOf(b.anchor.selectedText) : -1;
+      const posA = a.anchor.selectedText ? documentText.indexOf(a.anchor.selectedText) : -1;
+      const posB = b.anchor.selectedText ? documentText.indexOf(b.anchor.selectedText) : -1;
       if (posA === -1 && posB === -1) return 0;
       if (posA === -1) return 1;
       if (posB === -1) return -1;
       return posA - posB;
     });
-  }, [filteredThreads, content]);
+  }, [filteredThreads, documentText]);
   const docThreads = filteredThreads.filter((t) => t.anchor.type === "document");
 
   const openCount = threads.filter((t) => t.status === "open").length;

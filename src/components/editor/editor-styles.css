@@ -307,3 +307,119 @@
   outline: 2px solid hsl(var(--primary));
   border-radius: 0.25rem;
 }
+
+/* Find highlights */
+mark.find-highlight {
+  background: hsl(50 100% 50% / 0.3);
+  border-radius: 2px;
+  padding: 0;
+}
+
+mark.find-active {
+  background: hsl(30 100% 50% / 0.6);
+  outline: 2px solid hsl(30 100% 50% / 0.8);
+  border-radius: 2px;
+}
+
+/* Mermaid diagram blocks */
+.mermaid-block {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  margin: 1.5rem 0;
+  overflow: hidden;
+}
+
+.mermaid-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: hsl(var(--muted));
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.mermaid-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.mermaid-zoom-btn {
+  font-size: 14px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 !important;
+}
+
+.mermaid-zoom-level {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  min-width: 36px;
+  text-align: center;
+}
+
+.mermaid-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+.mermaid-toggle {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+
+.mermaid-toggle:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--foreground));
+}
+
+.mermaid-render {
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  background: hsl(var(--background));
+  overflow-x: auto;
+}
+
+.mermaid-render svg {
+  overflow: visible;
+  max-width: none;
+  height: auto;
+}
+
+.mermaid-render svg .node rect,
+.mermaid-render svg .node polygon,
+.mermaid-render svg .node circle {
+  overflow: visible;
+}
+
+.mermaid-source {
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+.mermaid-error-msg {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.08);
+  border-top: 1px solid hsl(var(--border));
+}
+
+.mermaid-empty {
+  padding: 2rem;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+}
+
+.code-block-wrapper pre {
+  margin: 0;
+}

@@ -18,6 +18,7 @@ import "./editor-styles.css";
 import { common, createLowlight } from "lowlight";
 import { Markdown } from "tiptap-markdown";
 import { CommentMark } from "./comment-mark";
+import { MermaidCodeBlock } from "./mermaid-block";
 
 // ─── Types ─────────────────────────────────────────────────────
 interface CommentAuthor {
@@ -60,7 +61,26 @@ const vscode = acquireVsCodeApi();
 const lowlight = createLowlight(common);
 
 // ─── Toolbar Component ────────────────────────────────────────
-function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
+function EditorToolbar({ editor, sidebarVisible, onToggleSidebar, onShare }: {
+  editor: ReturnType<typeof useEditor>;
+  sidebarVisible: boolean;
+  onToggleSidebar: () => void;
+  onShare: () => void;
+}) {
+  const [inTable, setInTable] = useState(false);
+
+  // Track whether cursor is inside a table
+  useEffect(() => {
+    if (!editor) return;
+    const update = () => setInTable(editor.isActive("table"));
+    editor.on("selectionUpdate", update);
+    editor.on("transaction", update);
+    return () => {
+      editor.off("selectionUpdate", update);
+      editor.off("transaction", update);
+    };
+  }, [editor]);
+
   if (!editor) return null;
 
   const Btn = ({
@@ -158,7 +178,7 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
         ⊞
       </Btn>
 
-      {editor.isActive("table") && (
+      {inTable && (
         <>
           <Sep />
           <Btn onClick={() => editor.chain().focus().addRowBefore().run()} title="Add row above">↑+</Btn>
@@ -171,6 +191,17 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
           <Btn onClick={() => editor.chain().focus().deleteTable().run()} title="Delete table">⊞✕</Btn>
         </>
       )}
+
+      <span style={{ flex: 1 }} />
+      <Btn onClick={onShare} title="Share document">
+        🔗
+      </Btn>
+      <Btn
+        onClick={onToggleSidebar}
+        title={sidebarVisible ? "Hide comments (Ctrl+\\)" : "Show comments (Ctrl+\\)"}
+      >
+        {sidebarVisible ? "💬 ▸" : "💬 ◂"}
+      </Btn>
     </div>
   );
 }
@@ -184,6 +215,7 @@ function CommentSidebar({
   onResolve,
   onReopen,
   onCancelDraft,
+  documentText,
 }: {
   threads: CommentThread[];
   activeThreadId: string | null;
@@ -192,6 +224,7 @@ function CommentSidebar({
   onResolve: (threadId: string) => void;
   onReopen: (threadId: string) => void;
   onCancelDraft: (draftId: string) => void;
+  documentText: string;
 }) {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState("");
@@ -210,10 +243,26 @@ function CommentSidebar({
   }, [draftThreadId]);
 
   const openCount = threads.filter((t) => t.status === "open").length;
-  const filteredThreads = threads.filter((t) => {
-    if (filter === "all") return true;
-    return filter === "open" ? t.status === "open" : t.status === "resolved";
-  });
+  const filteredThreads = threads
+    .filter((t) => {
+      if (filter === "all") return true;
+      return filter === "open" ? t.status === "open" : t.status === "resolved";
+    })
+    .sort((a, b) => {
+      // Sort by document position; document-level (no anchor) at the bottom
+      const aIsDoc = a.anchor.type === "document" || !a.anchor.selectedText;
+      const bIsDoc = b.anchor.type === "document" || !b.anchor.selectedText;
+      if (aIsDoc && bIsDoc) return 0;
+      if (aIsDoc) return 1;
+      if (bIsDoc) return -1;
+      const posA = documentText ? documentText.indexOf(a.anchor.selectedText) : -1;
+      const posB = documentText ? documentText.indexOf(b.anchor.selectedText) : -1;
+      // Threads whose anchor text isn't found get pushed to the bottom (orphaned)
+      if (posA === -1 && posB === -1) return 0;
+      if (posA === -1) return 1;
+      if (posB === -1) return -1;
+      return posA - posB;
+    });
 
   const handleSubmitReply = (threadId: string) => {
     if (!replyBody.trim()) return;
@@ -417,6 +466,12 @@ function App() {
   const [isDirty, setIsDirty] = useState(false);
   const [filePath, setFilePath] = useState("");
   const [currentUser, setCurrentUser] = useState<CommentAuthor>({ login: 'you', avatarUrl: '' });
+  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [zoomLevel, setZoomLevel] = useState(100);
+  const [showFindBar, setShowFindBar] = useState(false);
+  const ZOOM_MIN = 50;
+  const ZOOM_MAX = 200;
+  const ZOOM_STEP = 10;
   const contentRef = useRef<string>("");
   const initialContentRef = useRef<string>("");
   const isExternalUpdateRef = useRef(false);
@@ -438,7 +493,7 @@ function App() {
       TaskList,
       TaskItem.configure({ nested: true }),
       HorizontalRule,
-      CodeBlockLowlight.configure({ lowlight }),
+      MermaidCodeBlock.configure({ lowlight }),
       Markdown.configure({ html: false, transformCopiedText: true, transformPastedText: true }),
       CommentMark.configure({ HTMLAttributes: { class: "comment-highlight" } }),
     ],
@@ -447,6 +502,19 @@ function App() {
     editorProps: {
       attributes: {
         class: "prose-editor outline-none min-h-full px-8 py-6 mx-auto",
+      },
+      clipboardTextSerializer: (slice) => {
+        // Extract plain text from the slice so partial table selections
+        // copy the actual cell text instead of "[table]"
+        let text = "";
+        slice.content.descendants((node) => {
+          if (node.isText) {
+            text += node.text;
+          } else if (node.isBlock && text.length > 0) {
+            text += "\n";
+          }
+        });
+        return text.trim();
       },
     },
     onUpdate: ({ editor: ed }) => {
@@ -702,10 +770,40 @@ function App() {
         e.preventDefault();
         handleCreateComment();
       }
+      // Ctrl+\ to toggle comment sidebar
+      if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
+        e.preventDefault();
+        setSidebarVisible((v) => !v);
+      }
+      // Ctrl+F to open find bar
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        setShowFindBar(true);
+      }
+      // Escape to close find bar
+      if (e.key === "Escape" && showFindBar) {
+        setShowFindBar(false);
+        // Clear any browser highlight
+        window.getSelection()?.removeAllRanges();
+      }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isDirty]);
+  }, [isDirty, showFindBar]);
+
+  // Ctrl+Scroll to zoom
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      setZoomLevel((prev) => {
+        const next = prev + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
+        return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+      });
+    };
+    document.addEventListener("wheel", handleWheel, { passive: false });
+    return () => document.removeEventListener("wheel", handleWheel);
+  }, []);
 
   const handleCreateComment = useCallback(() => {
     if (!editor) return;
@@ -848,10 +946,11 @@ function App() {
   return (
     <div className="app-container">
       <div className="editor-area">
-        {editable && <EditorToolbar editor={editor} />}
+        {editable && <EditorToolbar editor={editor} sidebarVisible={sidebarVisible} onToggleSidebar={() => setSidebarVisible((v) => !v)} onShare={() => vscode.postMessage({ type: "share" })} />}
+        {showFindBar && <FindBar onClose={() => setShowFindBar(false)} />}
         {/* Selection toolbar for commenting */}
         <SelectionToolbar editor={editor} onComment={handleCreateComment} />
-        <div className="editor-scroll">
+        <div className="editor-scroll" style={{ zoom: zoomLevel / 100 }}>
           <EditorContent editor={editor} className="editor-content" />
         </div>
         {/* Status bar */}
@@ -860,18 +959,203 @@ function App() {
           <span className="status-indicators">
             {isDirty && <span className="dirty-indicator">● Modified</span>}
             {!editable && <span className="readonly-indicator">Read Only</span>}
+            <button
+              className="toolbar-btn zoom-indicator"
+              onClick={() => setZoomLevel(100)}
+              title="Reset zoom (click to reset)"
+            >
+              {zoomLevel}%
+            </button>
           </span>
         </div>
       </div>
-      <CommentSidebar
-        threads={threads}
-        activeThreadId={activeThreadId}
-        onSelect={handleSelectThread}
-        onReply={handleReply}
-        onResolve={handleResolve}
-        onReopen={handleReopen}
-        onCancelDraft={handleCancelDraft}
+      {sidebarVisible && (
+        <CommentSidebar
+          threads={threads}
+          activeThreadId={activeThreadId}
+          onSelect={handleSelectThread}
+          onReply={handleReply}
+          onResolve={handleResolve}
+          onReopen={handleReopen}
+          onCancelDraft={handleCancelDraft}
+          documentText={editor?.state.doc.textContent ?? ""}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Find Bar ──────────────────────────────────────────────────
+function FindBar({
+  onClose,
+}: {
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [matchIndex, setMatchIndex] = useState(0);
+  const [matchCount, setMatchCount] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  const clearHighlights = useCallback(() => {
+    document.querySelectorAll("mark.find-highlight").forEach((el) => {
+      const parent = el.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(el.textContent || ""), el);
+        parent.normalize();
+      }
+    });
+  }, []);
+
+  // Clear highlights on unmount (covers all close paths)
+  useEffect(() => {
+    return () => {
+      document.querySelectorAll("mark.find-highlight").forEach((el) => {
+        const parent = el.parentNode;
+        if (parent) {
+          parent.replaceChild(document.createTextNode(el.textContent || ""), el);
+          parent.normalize();
+        }
+      });
+    };
+  }, []);
+
+  const doSearch = useCallback(
+    (searchText: string, jumpTo?: number) => {
+      clearHighlights();
+      if (!searchText.trim()) {
+        setMatchCount(0);
+        setMatchIndex(0);
+        return;
+      }
+
+      const editorEl = document.querySelector(".prose-editor");
+      if (!editorEl) return;
+
+      // Collect all text nodes first, then process matches
+      const textNodes: Text[] = [];
+      const walker = document.createTreeWalker(editorEl, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        textNodes.push(walker.currentNode as Text);
+      }
+
+      const lowerQuery = searchText.toLowerCase();
+      const allMatches: { node: Text; start: number }[] = [];
+
+      for (const textNode of textNodes) {
+        const text = textNode.textContent || "";
+        let idx = text.toLowerCase().indexOf(lowerQuery);
+        while (idx !== -1) {
+          allMatches.push({ node: textNode, start: idx });
+          idx = text.toLowerCase().indexOf(lowerQuery, idx + 1);
+        }
+      }
+
+      setMatchCount(allMatches.length);
+      if (allMatches.length === 0) {
+        setMatchIndex(0);
+        return;
+      }
+
+      const target = jumpTo !== undefined ? jumpTo % allMatches.length : 0;
+      setMatchIndex(target);
+
+      // Highlight in reverse order using splitText to avoid cross-boundary issues
+      const processed = [...allMatches].reverse();
+      for (let i = 0; i < processed.length; i++) {
+        const { node, start } = processed[i];
+        const originalIndex = allMatches.length - 1 - i;
+        try {
+          // Split: [before][match][after]
+          const matchNode = node.splitText(start);
+          matchNode.splitText(searchText.length);
+          const mark = document.createElement("mark");
+          mark.className =
+            "find-highlight" + (originalIndex === target ? " find-active" : "");
+          matchNode.parentNode!.replaceChild(mark, matchNode);
+          mark.appendChild(matchNode);
+        } catch {
+          // Skip if split fails
+        }
+      }
+
+      const active = document.querySelector("mark.find-active");
+      active?.scrollIntoView({ behavior: "smooth", block: "center" });
+    },
+    [clearHighlights],
+  );
+
+  const handleChange = (value: string) => {
+    setQuery(value);
+    clearHighlights();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!value.trim()) {
+      setMatchCount(0);
+      setMatchIndex(0);
+      return;
+    }
+    debounceRef.current = window.setTimeout(() => {
+      doSearch(value, 0);
+    }, 200);
+  };
+
+  const goNext = () => {
+    if (matchCount === 0) return;
+    const next = (matchIndex + 1) % matchCount;
+    doSearch(query, next);
+  };
+
+  const goPrev = () => {
+    if (matchCount === 0) return;
+    const prev = (matchIndex - 1 + matchCount) % matchCount;
+    doSearch(query, prev);
+  };
+
+  const handleClose = () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    clearHighlights();
+    onClose();
+  };
+
+  return (
+    <div className="find-bar">
+      <input
+        ref={inputRef}
+        className="find-input"
+        type="text"
+        value={query}
+        onChange={(e) => handleChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && e.shiftKey) {
+            e.preventDefault();
+            goPrev();
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            goNext();
+          }
+          if (e.key === "Escape") {
+            handleClose();
+          }
+        }}
+        placeholder="Find..."
       />
+      <span className="find-count">
+        {query ? `${matchCount > 0 ? matchIndex + 1 : 0}/${matchCount}` : ""}
+      </span>
+      <button className="toolbar-btn" onClick={goPrev} title="Previous (Shift+Enter)">
+        ↑
+      </button>
+      <button className="toolbar-btn" onClick={goNext} title="Next (Enter)">
+        ↓
+      </button>
+      <button className="toolbar-btn" onClick={handleClose} title="Close (Esc)">
+        ✕
+      </button>
     </div>
   );
 }

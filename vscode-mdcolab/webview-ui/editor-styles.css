@@ -132,6 +132,33 @@ body {
 .status-indicators {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+
+.sidebar-toggle {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  font-size: 12px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.sidebar-toggle:hover {
+  opacity: 1;
+}
+
+.zoom-indicator {
+  font-size: 11px;
+  opacity: 0.7;
+  min-width: auto;
+  padding: 0 4px;
+  height: 24px;
+  transition: opacity 0.15s;
+}
+
+.zoom-indicator:hover {
+  opacity: 1;
 }
 
 /* ─── Selection Toolbar ────────────────────────────────────── */
@@ -689,6 +716,106 @@ body {
   outline: none;
 }
 
+/* ─── Mermaid Diagram Blocks ───────────────────────────────── */
+.mermaid-block {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  margin: 1.5rem 0;
+  overflow: hidden;
+}
+
+.mermaid-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: hsl(var(--muted));
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.mermaid-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.mermaid-zoom-btn {
+  font-size: 14px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+.mermaid-zoom-level {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  min-width: 36px;
+  text-align: center;
+}
+
+.mermaid-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+.mermaid-toggle {
+  font-size: 11px;
+  min-width: auto;
+  height: 24px;
+  padding: 0 8px;
+}
+
+.mermaid-render {
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  background: hsl(222 47% 4%);
+  overflow-x: auto;
+}
+
+.mermaid-render svg {
+  overflow: visible;
+  max-width: none;
+  height: auto;
+}
+
+.mermaid-render svg .node rect,
+.mermaid-render svg .node polygon,
+.mermaid-render svg .node circle {
+  overflow: visible;
+}
+
+.mermaid-source {
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+.mermaid-error {
+  position: relative;
+}
+
+.mermaid-error-msg {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.08);
+  border-top: 1px solid hsl(var(--border));
+}
+
+.mermaid-empty {
+  padding: 2rem;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+}
+
+/* Standard code block wrapper (non-mermaid) */
+.code-block-wrapper pre {
+  margin: 0;
+}
+
 /* ─── Comment Highlights ───────────────────────────────────── */
 .comment-highlight {
   background: hsl(50 100% 50% / 0.15);
@@ -710,6 +837,53 @@ body {
 .comment-highlight-resolved {
   opacity: 0.5;
   border-bottom-style: dashed;
+}
+
+/* ─── Find Bar ─────────────────────────────────────────────── */
+.find-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  flex-shrink: 0;
+}
+
+.find-input {
+  flex: 1;
+  max-width: 280px;
+  padding: 4px 8px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.find-input:focus {
+  border-color: hsl(var(--primary) / 0.5);
+}
+
+.find-count {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  min-width: 40px;
+  text-align: center;
+}
+
+mark.find-highlight {
+  background: hsl(50 100% 50% / 0.3);
+  border-radius: 2px;
+  padding: 0;
+}
+
+mark.find-active {
+  background: hsl(30 100% 50% / 0.6);
+  outline: 2px solid hsl(30 100% 50% / 0.8);
+  border-radius: 2px;
 }
 
 /* ─── Scrollbar ────────────────────────────────────────────── */

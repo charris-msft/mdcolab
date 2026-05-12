@@ -15,11 +15,11 @@ const LABEL_COLOR = "7B61FF";
 interface IssueMetadata {
   file: string;
   anchor: CommentAnchor;
-  anonymousAuthor?: { displayName: string };
+  anonymousAuthor?: { displayName: string; anonId?: string };
   proxyAuthor?: { login: string; avatarUrl: string };
 }
 
-function buildIssueBody(anchor: CommentAnchor, commentBody: string, filePath: string, anonymousAuthor?: { displayName: string }, proxyAuthor?: { login: string; avatarUrl: string }): string {
+function buildIssueBody(anchor: CommentAnchor, commentBody: string, filePath: string, anonymousAuthor?: { displayName: string; anonId?: string }, proxyAuthor?: { login: string; avatarUrl: string }): string {
   const meta: IssueMetadata = { file: filePath, anchor, ...(anonymousAuthor && { anonymousAuthor }), ...(proxyAuthor && { proxyAuthor }) };
   return `<!-- mdcolab-metadata\n${JSON.stringify(meta, null, 2)}\n-->\n\n${commentBody}`;
 }
@@ -42,15 +42,17 @@ function extractCommentBody(body: string): string {
 const ANON_TAG = "mdcolab-anon";
 const PROXY_TAG = "mdcolab-proxy";
 
-function buildAnonCommentBody(body: string, displayName: string): string {
-  return `<!-- ${ANON_TAG} ${JSON.stringify({ displayName })} -->\n\n${body}`;
+function buildAnonCommentBody(body: string, displayName: string, anonId?: string): string {
+  const data: { displayName: string; anonId?: string } = { displayName };
+  if (anonId) data.anonId = anonId;
+  return `<!-- ${ANON_TAG} ${JSON.stringify(data)} -->\n\n${body}`;
 }
 
 function buildProxyCommentBody(body: string, login: string, avatarUrl: string): string {
   return `<!-- ${PROXY_TAG} ${JSON.stringify({ login, avatarUrl })} -->\n\n${body}`;
 }
 
-function parseAnonAuthor(body: string): { displayName: string } | null {
+function parseAnonAuthor(body: string): { displayName: string; anonId?: string } | null {
   const match = body.match(new RegExp(`<!--\\s*${ANON_TAG}\\s+(\\{.*?\\})\\s*-->`));
   if (!match) return null;
   try { return JSON.parse(match[1]); } catch { return null; }
@@ -99,7 +101,7 @@ function extractMentions(body: string): string[] {
   return [...new Set(matches.map((m) => m.slice(1)))];
 }
 
-function toComment(src: { id: number; body: string; user: GitHubUser | null; created_at: string; updated_at: string }, anonOverride?: { displayName: string }, proxyOverride?: { login: string; avatarUrl: string }): Comment {
+function toComment(src: { id: number; body: string; user: GitHubUser | null; created_at: string; updated_at: string }, anonOverride?: { displayName: string; anonId?: string }, proxyOverride?: { login: string; avatarUrl: string }): Comment {
   // Check for inline anonymous/proxy author metadata in the body (for replies)
   const inlineAnon = !anonOverride ? parseAnonAuthor(src.body) : null;
   const inlineProxy = !proxyOverride && !inlineAnon ? parseProxyAuthor(src.body) : null;
@@ -113,6 +115,7 @@ function toComment(src: { id: number; body: string; user: GitHubUser | null; cre
       author: {
         login: null,
         displayName: anon.displayName,
+        anonId: anon.anonId,
         avatarUrl: null,
         isAnonymous: true,
       },
@@ -431,6 +434,7 @@ export async function POST(
           if (authorized) {
             const action: string = body.action;
             const displayName: string = body.displayName || "Anonymous";
+            const anonId: string | undefined = body.anonId;
 
             if (action === "create") {
               const anchor: CommentAnchor = body.anchor;
@@ -444,7 +448,7 @@ export async function POST(
               const selectedText = anchor.selectedText || "General comment";
               const truncated = selectedText.length > 50 ? selectedText.slice(0, 50) + "…" : selectedText;
               const title = `[mdcolab] "${truncated}" — ${filePath}`;
-              const anonAuthor = isAnonymous ? { displayName } : undefined;
+              const anonAuthor = isAnonymous ? { displayName, anonId } : undefined;
               const { data: issue } = await installationOctokit.issues.create({
                 owner,
                 repo,
@@ -466,14 +470,14 @@ export async function POST(
             if (action === "reply") {
               const issueNumber: number = body.issueNumber;
               const commentBody: string = body.body;
-              const finalBody = isAnonymous ? buildAnonCommentBody(commentBody, displayName) : commentBody;
+              const finalBody = isAnonymous ? buildAnonCommentBody(commentBody, displayName, anonId) : commentBody;
               const { data: comment } = await installationOctokit.issues.createComment({
                 owner,
                 repo,
                 issue_number: issueNumber,
                 body: finalBody,
               });
-              const anonOverride = isAnonymous ? { displayName } : undefined;
+              const anonOverride = isAnonymous ? { displayName, anonId } : undefined;
               return NextResponse.json({
                 comment: toComment({ id: comment.id, body: commentBody, user: comment.user as GitHubUser | null, created_at: comment.created_at, updated_at: comment.updated_at }, anonOverride),
               });
@@ -665,6 +669,7 @@ export async function POST(
         if (authorized) {
           const action: string = body.action;
           const displayName: string = body.displayName || "Anonymous";
+          const anonId: string | undefined = body.anonId;
           const proxyAuthor = !isAnonymous ? { login, avatarUrl } : undefined;
 
           if (action === "create") {
@@ -679,7 +684,7 @@ export async function POST(
             const selectedText = anchor.selectedText || "General comment";
             const truncated = selectedText.length > 50 ? selectedText.slice(0, 50) + "…" : selectedText;
             const title = `[mdcolab] "${truncated}" — ${filePath}`;
-            const anonAuthor = isAnonymous ? { displayName } : undefined;
+            const anonAuthor = isAnonymous ? { displayName, anonId } : undefined;
             const { data: issue } = await installationOctokit.issues.create({
               owner,
               repo,
@@ -703,7 +708,7 @@ export async function POST(
             const commentBody: string = body.body;
             let finalBody: string;
             if (isAnonymous) {
-              finalBody = buildAnonCommentBody(commentBody, displayName);
+              finalBody = buildAnonCommentBody(commentBody, displayName, anonId);
             } else {
               finalBody = buildProxyCommentBody(commentBody, login, avatarUrl);
             }
@@ -713,7 +718,7 @@ export async function POST(
               issue_number: issueNumber,
               body: finalBody,
             });
-            const anonOverride = isAnonymous ? { displayName } : undefined;
+            const anonOverride = isAnonymous ? { displayName, anonId } : undefined;
             return NextResponse.json({
               comment: toComment({ id: comment.id, body: commentBody, user: comment.user as GitHubUser | null, created_at: comment.created_at, updated_at: comment.updated_at }, anonOverride, proxyAuthor),
             });

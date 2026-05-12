@@ -13,6 +13,31 @@ export class MdcolabEditorPanel {
 
   private static panels: Map<string, MdcolabEditorPanel> = new Map();
 
+  /**
+   * Get repo context from the most recently active WYSIWYG panel (if any).
+   * Used by Copilot tools when activeTextEditor is null (webview is focused).
+   */
+  public static getActiveContext(): {
+    owner: string;
+    repo: string;
+    filePath: string;
+    fileUri: vscode.Uri;
+    content: string;
+  } | null {
+    for (const panel of MdcolabEditorPanel.panels.values()) {
+      if (panel._panel.active && panel._repoInfo) {
+        return {
+          owner: panel._repoInfo.owner,
+          repo: panel._repoInfo.repo,
+          filePath: panel._relativePath,
+          fileUri: panel._fileUri,
+          content: panel._lastKnownContent,
+        };
+      }
+    }
+    return null;
+  }
+
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
   private readonly _fileUri: vscode.Uri;
@@ -22,6 +47,32 @@ export class MdcolabEditorPanel {
   private _lastKnownContent = '';
   private _isSaving = false;
   private _disposables: vscode.Disposable[] = [];
+
+  /**
+   * Convert an API CommentThread to the shape the webview expects.
+   */
+  private static _toWebviewThread(t: api.CommentThread): Record<string, unknown> {
+    return {
+      id: String(t.issueNumber),
+      issueNumber: t.issueNumber,
+      status: t.state === 'open' ? 'open' : 'resolved',
+      anchor: t.anchor,
+      comments: [
+        {
+          id: `issue-${t.issueNumber}`,
+          author: { login: t.author, avatarUrl: '' },
+          body: t.body,
+          createdAt: t.createdAt,
+        },
+        ...t.replies.map((r) => ({
+          id: String(r.id),
+          author: { login: r.author, avatarUrl: '' },
+          body: r.body,
+          createdAt: r.createdAt,
+        })),
+      ],
+    };
+  }
 
   /**
    * Open (or reveal) the mdcolab editor for the given file.
@@ -165,6 +216,11 @@ export class MdcolabEditorPanel {
         // Track what the webview currently has to avoid echo on external change detection
         this._lastKnownContent = msg.markdown as string;
         break;
+
+      case 'share':
+        // Trigger the share command for this file
+        vscode.commands.executeCommand('mdcolab.shareWithMdcolab', this._fileUri);
+        break;
     }
   }
 
@@ -208,7 +264,7 @@ export class MdcolabEditorPanel {
       filePath: this._relativePath || path.basename(this._fileUri.fsPath),
     });
 
-    // Load and send comments — threads now match the web format exactly
+    // Load and send comments — transform to webview shape
     if (this._repoInfo) {
       try {
         const threads = await api.fetchCommentThreads(
@@ -219,7 +275,7 @@ export class MdcolabEditorPanel {
 
         this._panel.webview.postMessage({
           type: 'setThreads',
-          threads,
+          threads: threads.map(MdcolabEditorPanel._toWebviewThread),
         });
       } catch (err) {
         console.error('Failed to load comments for webview:', err);
@@ -298,7 +354,7 @@ export class MdcolabEditorPanel {
         this._panel.webview.postMessage({
           type: 'threadCreated',
           draftId,
-          thread,
+          thread: MdcolabEditorPanel._toWebviewThread(thread),
         });
       }
     } catch (err) {
@@ -323,7 +379,12 @@ export class MdcolabEditorPanel {
         this._panel.webview.postMessage({
           type: 'replyAdded',
           threadId,
-          comment,
+          comment: {
+            id: String(comment.id),
+            author: { login: comment.author, avatarUrl: '' },
+            body: comment.body,
+            createdAt: comment.createdAt,
+          },
         });
       }
     } catch (err) {

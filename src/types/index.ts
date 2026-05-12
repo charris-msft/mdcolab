@@ -1,6 +1,7 @@
 export interface CommentAuthor {
   login: string | null;
   displayName?: string;
+  anonId?: string;
   avatarUrl: string | null;
   isAnonymous?: boolean;
 }

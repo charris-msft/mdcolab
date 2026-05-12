@@ -11,6 +11,7 @@ interface EditorState {
   filePath: string;
   fileSha: string | null;
   showTrackChanges: boolean;
+  hybridSave: (() => void) | null;
   setEditor: (editor: Editor | null) => void;
   setEditable: (editable: boolean) => void;
   setDirty: (dirty: boolean) => void;
@@ -20,6 +21,7 @@ interface EditorState {
   setFilePath: (path: string) => void;
   setFileSha: (sha: string | null) => void;
   setShowTrackChanges: (show: boolean) => void;
+  setHybridSave: (fn: (() => void) | null) => void;
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -32,6 +34,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   filePath: "",
   fileSha: null,
   showTrackChanges: false,
+  hybridSave: null,
   setEditor: (editor) => set({ editor }),
   setEditable: (editable) => set({ isEditable: editable }),
   setDirty: (dirty) => set({ isDirty: dirty }),
@@ -41,4 +44,5 @@ export const useEditorStore = create<EditorState>((set) => ({
   setFilePath: (path) => set({ filePath: path }),
   setFileSha: (sha) => set({ fileSha: sha }),
   setShowTrackChanges: (show) => set({ showTrackChanges: show }),
+  setHybridSave: (fn) => set({ hybridSave: fn }),
 }));

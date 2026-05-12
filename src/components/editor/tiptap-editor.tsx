@@ -19,6 +19,7 @@ import { Markdown } from "tiptap-markdown";
 import { useEffect } from "react";
 import { useEditorStore } from "@/stores/editor-store";
 import { CommentMark } from "./extensions/comment-mark";
+import { serializeClipboardText } from "./clipboard";
 
 const lowlight = createLowlight(common);
 
@@ -75,7 +76,7 @@ export function TiptapEditor({
       }),
       Markdown.configure({
         html: false,
-        transformCopiedText: true,
+        transformCopiedText: false,
         transformPastedText: true,
       }),
       CommentMark.configure({
@@ -90,6 +91,7 @@ export function TiptapEditor({
       attributes: {
         class: "prose-editor outline-none min-h-[500px] px-4 py-8 mx-auto max-w-[720px]",
       },
+      clipboardTextSerializer: serializeClipboardText,
     },
     onUpdate: ({ editor }) => {
       setDirty(true);
