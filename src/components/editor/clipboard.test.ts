@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Fragment, Schema, Slice } from "@tiptap/pm/model";
+import { Fragment, Node as ProseMirrorNode, Schema, Slice } from "@tiptap/pm/model";
 import { serializeClipboardText } from "./clipboard";
 
 const schema = new Schema({
@@ -29,7 +29,7 @@ const schema = new Schema({
   },
 });
 
-function sliceFromParagraph(...content: Parameters<typeof schema.nodes.paragraph.create>[1][]) {
+function sliceFromParagraph(...content: ProseMirrorNode[]) {
   return new Slice(
     Fragment.from(schema.nodes.paragraph.create(null, content)),
     0,
