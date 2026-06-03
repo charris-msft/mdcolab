@@ -24,7 +24,7 @@ export interface Comment {
 }
 
 export interface CommentAnchor {
-  type: "text-range" | "document";
+  type: "text-range" | "html-range" | "document";
   markdownOffset?: {
     start: number;
     end: number;
@@ -33,6 +33,12 @@ export interface CommentAnchor {
   context: {
     before: string;
     after: string;
+  };
+  html?: {
+    domPath: string;
+    textQuote: string;
+    fileSha?: string;
+    status?: "exact" | "moved" | "orphaned";
   };
 }
 

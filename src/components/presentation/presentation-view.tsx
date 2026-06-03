@@ -9,14 +9,29 @@ interface PresentationViewProps {
   theme?: "dark" | "light";
 }
 
+interface RevealDeck {
+  initialize: () => Promise<void> | void;
+  destroy: () => void;
+  on: (event: string, callback: () => void) => void;
+  getTotalSlides?: () => number;
+  getIndices?: () => { h: number; v: number };
+  getHorizontalSlides?: () => Element[];
+  isOverview?: () => boolean;
+}
+
+type RevealConstructor = new (
+  container: HTMLElement,
+  options: Record<string, unknown>
+) => RevealDeck;
+type RevealPlugin = unknown;
+
 export function PresentationView({
   markdown,
   onExit,
   theme = "dark",
 }: PresentationViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const deckRef = useRef<any>(null);
+  const deckRef = useRef<RevealDeck | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [slideInfo, setSlideInfo] = useState({ current: 0, total: 0 });
   const [controlsVisible, setControlsVisible] = useState(false);
@@ -59,17 +74,16 @@ export function PresentationView({
     let destroyed = false;
 
     const initReveal = async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const [Reveal, RevealMarkdown, RevealHighlight, RevealNotes] =
         await Promise.all([
           // @ts-expect-error -- reveal.js lacks type declarations
-          import("reveal.js").then((m: any) => m.default),
+          import("reveal.js").then((m: unknown) => (m as { default: RevealConstructor }).default),
           // @ts-expect-error -- reveal.js plugin ESM imports lack type declarations
-          import("reveal.js/plugin/markdown/markdown.esm.js").then((m: any) => m.default),
+          import("reveal.js/plugin/markdown/markdown.esm.js").then((m: unknown) => (m as { default: RevealPlugin }).default),
           // @ts-expect-error -- reveal.js plugin ESM imports lack type declarations
-          import("reveal.js/plugin/highlight/highlight.esm.js").then((m: any) => m.default),
+          import("reveal.js/plugin/highlight/highlight.esm.js").then((m: unknown) => (m as { default: RevealPlugin }).default),
           // @ts-expect-error -- reveal.js plugin ESM imports lack type declarations
-          import("reveal.js/plugin/notes/notes.esm.js").then((m: any) => m.default),
+          import("reveal.js/plugin/notes/notes.esm.js").then((m: unknown) => (m as { default: RevealPlugin }).default),
         ]);
 
       if (destroyed || !containerRef.current) return;

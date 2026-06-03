@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOctokit, getSession } from "@/lib/github";
 import type { GitHubRepo } from "@/types";
 
+type SessionWithLogin = { login?: string };
+
 export async function GET(req: NextRequest) {
   try {
     const octokit = await getOctokit();
     const session = await getSession();
-    const login = (session as any)?.login as string;
+    const login = (session as SessionWithLogin | null)?.login;
     const limitParam = req.nextUrl.searchParams.get("limit");
     const limit = limitParam ? Math.min(parseInt(limitParam, 10), 100) : undefined;
 

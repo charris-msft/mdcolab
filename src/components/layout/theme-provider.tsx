@@ -21,55 +21,38 @@ export function useTheme() {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
-  const [resolvedTheme, setResolvedTheme] = useState<"dark" | "light">("dark");
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window === "undefined") return "dark";
+    return (localStorage.getItem("mdcolab-theme") as Theme | null) ?? "dark";
+  });
+  const [systemTheme, setSystemTheme] = useState<"dark" | "light">(() => {
+    if (typeof window === "undefined") return "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  });
+  const resolvedTheme = theme === "system" ? systemTheme : theme;
 
   useEffect(() => {
-    const stored = localStorage.getItem("mdcolab-theme") as Theme | null;
-    if (stored) {
-      setThemeState(stored);
-    }
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => {
+      setSystemTheme(e.matches ? "dark" : "light");
+    };
+    mediaQuery.addEventListener("change", handler);
+    return () => mediaQuery.removeEventListener("change", handler);
   }, []);
 
   useEffect(() => {
     const root = document.documentElement;
 
-    let resolved: "dark" | "light";
-    if (theme === "system") {
-      resolved = window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light";
-    } else {
-      resolved = theme;
-    }
-
-    setResolvedTheme(resolved);
-
     // Add transitioning class for smooth theme switch
     root.classList.add("transitioning");
     root.classList.remove("dark", "light");
-    root.classList.add(resolved);
+    root.classList.add(resolvedTheme);
     requestAnimationFrame(() => {
       setTimeout(() => root.classList.remove("transitioning"), 300);
     });
-
-    // Listen for system preference changes
-    if (theme === "system") {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const handler = (e: MediaQueryListEvent) => {
-        const newResolved = e.matches ? "dark" : "light";
-        setResolvedTheme(newResolved);
-        root.classList.add("transitioning");
-        root.classList.remove("dark", "light");
-        root.classList.add(newResolved);
-        requestAnimationFrame(() => {
-          setTimeout(() => root.classList.remove("transitioning"), 300);
-        });
-      };
-      mediaQuery.addEventListener("change", handler);
-      return () => mediaQuery.removeEventListener("change", handler);
-    }
-  }, [theme]);
+  }, [resolvedTheme]);
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);

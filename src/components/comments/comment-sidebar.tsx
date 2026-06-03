@@ -120,7 +120,9 @@ export function CommentSidebar({ hasIssues = true, canEdit = false }: { hasIssue
   );
 
   const textThreads = useMemo(() => {
-    const filtered = filteredThreads.filter((t) => t.anchor.type === "text-range");
+    const filtered = filteredThreads.filter(
+      (t) => t.anchor.type === "text-range" || t.anchor.type === "html-range"
+    );
     if (!documentText) return filtered;
     return [...filtered].sort((a, b) => {
       const posA = a.anchor.selectedText ? documentText.indexOf(a.anchor.selectedText) : -1;
@@ -238,7 +240,7 @@ export function CommentSidebar({ hasIssues = true, canEdit = false }: { hasIssue
     );
     setDocCommentBody("");
     setShowDocInput(false);
-  }, [docCommentBody, createThread, isAnonymous, guestName]);
+  }, [docCommentBody, createThread, isAnonymous, guestName, setShowDocInput]);
 
   const handleSelect = useCallback(
     (threadId: string) => {

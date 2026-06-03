@@ -118,7 +118,8 @@ export function useCommentAnchors(editor: Editor | null) {
   // Update editor highlight visibility based on active filter (CSS-driven, no mark re-application)
   useEffect(() => {
     if (!editor) return;
-    editor.view.dom.dataset.commentFilter = filterStatus;
+    const editorElement = editor.view.dom;
+    editorElement.setAttribute("data-comment-filter", filterStatus);
   }, [editor, filterStatus]);
 
   // Scroll to and highlight the anchor for a given threadId

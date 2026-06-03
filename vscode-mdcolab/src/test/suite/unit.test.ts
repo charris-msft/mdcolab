@@ -10,7 +10,7 @@ suite('git-utils', () => {
   suite('getRelativeFilePath', () => {
     test('computes relative path for nested file', () => {
       const result = getRelativeFilePath(
-        { fsPath: path.join('C:', 'repos', 'myrepo', 'docs', 'readme.md') } as any,
+        { fsPath: path.join('C:', 'repos', 'myrepo', 'docs', 'readme.md') },
         path.join('C:', 'repos', 'myrepo'),
       );
       assert.strictEqual(result, 'docs/readme.md');
@@ -18,7 +18,7 @@ suite('git-utils', () => {
 
     test('handles root file', () => {
       const result = getRelativeFilePath(
-        { fsPath: path.join('C:', 'repos', 'myrepo', 'readme.md') } as any,
+        { fsPath: path.join('C:', 'repos', 'myrepo', 'readme.md') },
         path.join('C:', 'repos', 'myrepo'),
       );
       assert.strictEqual(result, 'readme.md');
@@ -26,7 +26,7 @@ suite('git-utils', () => {
 
     test('handles deeply nested file', () => {
       const result = getRelativeFilePath(
-        { fsPath: path.join('C:', 'repos', 'myrepo', 'a', 'b', 'c', 'file.md') } as any,
+        { fsPath: path.join('C:', 'repos', 'myrepo', 'a', 'b', 'c', 'file.md') },
         path.join('C:', 'repos', 'myrepo'),
       );
       assert.strictEqual(result, 'a/b/c/file.md');
@@ -71,7 +71,7 @@ suite('git-utils', () => {
 });
 
 // ─── github-api pure-function tests ────────────────────────────
-import { parseMetadata, extractCommentBody, buildIssueBody, CommentAnchor, IssueMetadata } from '../../github-api.js';
+import { parseMetadata, extractCommentBody, buildIssueBody, isAccessError, CommentAnchor, IssueMetadata } from '../../github-api.js';
 
 suite('github-api helpers', () => {
   const sampleAnchor: CommentAnchor = {
@@ -132,6 +132,26 @@ suite('github-api helpers', () => {
       assert.deepStrictEqual(meta?.file, 'file.md');
       assert.deepStrictEqual(meta?.anchor.selectedText, 'hello world');
       assert.strictEqual(extractCommentBody(body), 'Round trip');
+    });
+  });
+
+  suite('isAccessError', () => {
+    test('treats 401/403/404 as access errors', () => {
+      assert.strictEqual(isAccessError({ status: 401 }), true);
+      assert.strictEqual(isAccessError({ status: 403 }), true);
+      assert.strictEqual(isAccessError({ status: 404 }), true);
+    });
+
+    test('treats other statuses as non-access errors', () => {
+      assert.strictEqual(isAccessError({ status: 422 }), false);
+      assert.strictEqual(isAccessError({ status: 500 }), false);
+      assert.strictEqual(isAccessError({ status: 200 }), false);
+    });
+
+    test('handles errors without a status', () => {
+      assert.strictEqual(isAccessError(new Error('boom')), false);
+      assert.strictEqual(isAccessError(null), false);
+      assert.strictEqual(isAccessError(undefined), false);
     });
   });
 });

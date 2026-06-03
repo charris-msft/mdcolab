@@ -22,6 +22,21 @@
     },
     "nextauthUrl": {
       "value": "${NEXTAUTH_URL}"
+    },
+    "webExists": {
+      "value": "${SERVICE_WEB_RESOURCE_EXISTS=false}"
+    },
+    "nodeEnv": {
+      "value": "${NODE_ENV=production}"
+    },
+    "githubAppId": {
+      "value": "${GITHUB_APP_ID}"
+    },
+    "githubAppPrivateKey": {
+      "value": "${GITHUB_APP_PRIVATE_KEY}"
+    },
+    "testPw": {
+      "value": "${TEST_PW}"
     }
   }
 }

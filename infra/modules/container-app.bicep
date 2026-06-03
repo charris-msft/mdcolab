@@ -8,17 +8,31 @@ param identityClientId string
 param env array = []
 param secrets array = []
 param targetPort int = 3000
+param cpu string = '0.5'
+param memory string = '1Gi'
+param minReplicas int = 0
+param maxReplicas int = 3
+
+@description('Whether the container app already exists. When true, the currently running image is preserved instead of being reset to the placeholder image (so azd provision never clobbers a live deployment).')
+param exists bool = false
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: containerRegistryName
 }
+
+resource existingApp 'Microsoft.App/containerApps@2024-03-01' existing = if (exists) {
+  name: name
+}
+
+var placeholderImage = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+var image = exists ? existingApp.properties.template.containers[0].image : placeholderImage
 
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: name
   location: location
   tags: tags
   identity: {
-    type: 'UserAssigned'
+    type: 'SystemAssigned, UserAssigned'
     userAssignedIdentities: {
       '${identityId}': {}
     }
@@ -44,28 +58,18 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
     template: {
       containers: [
         {
-          image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+          image: image
           name: 'web'
           env: env
           resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
+            cpu: json(cpu)
+            memory: memory
           }
         }
       ]
       scale: {
-        minReplicas: 0
-        maxReplicas: 3
-        rules: [
-          {
-            name: 'http-scaler'
-            http: {
-              metadata: {
-                concurrentRequests: '50'
-              }
-            }
-          }
-        ]
+        minReplicas: minReplicas
+        maxReplicas: maxReplicas
       }
     }
   }

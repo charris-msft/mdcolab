@@ -142,8 +142,8 @@ export class SharedFilesTreeProvider
       } else {
         this.config = { documents: {} };
       }
-    } catch (err: any) {
-      if (err?.status === 404) {
+    } catch (err: unknown) {
+      if ((err as { status?: number })?.status === 404) {
         // A 404 under `public_repo` scope could mean either "the file does
         // not exist" OR "the whole repo is private and invisible to us".
         // Disambiguate by probing the repo itself. If that also 404s and
@@ -160,8 +160,8 @@ export class SharedFilesTreeProvider
             });
             // Repo is visible → file genuinely doesn't exist.
             this.config = { documents: {} };
-          } catch (probeErr: any) {
-            if (probeErr?.status === 404) {
+          } catch (probeErr: unknown) {
+            if ((probeErr as { status?: number })?.status === 404) {
               this.needsPrivateAccess = true;
               this.config = null;
             } else {

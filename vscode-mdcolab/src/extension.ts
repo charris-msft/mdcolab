@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { getRepoInfo, getRelativeFilePath, buildMdcolabUrl, RepoInfo } from './git-utils.js';
 import * as api from './github-api.js';
 import { findAnchorRanges, applyDecorations } from './comment-decorations.js';
@@ -15,6 +16,49 @@ let currentThreads: api.CommentThread[] = [];
 let currentRepoInfo: RepoInfo | null = null;
 let currentFilePath = '';
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
+
+interface SharingDocumentConfig {
+  mode: 'anyone_with_link' | 'specific_people';
+  users?: string[];
+  allowEditing?: boolean;
+  expiresAt?: string;
+}
+
+interface ThreadCommandItem {
+  thread?: {
+    issueNumber?: number;
+  };
+}
+
+function isSupportedMdcolabDocument(document: vscode.TextDocument): boolean {
+  return document.languageId === 'markdown' || document.languageId === 'html';
+}
+
+function isMarkdownDocumentUri(uri: vscode.Uri): boolean {
+  return /\.(md|mdx)$/i.test(uri.fsPath);
+}
+
+function resolveFileContext(uri?: vscode.Uri): { repoInfo: RepoInfo; filePath: string } | null {
+  const fileUri = uri ?? vscode.window.activeTextEditor?.document.uri;
+  if (!fileUri) {
+    return currentRepoInfo ? { repoInfo: currentRepoInfo, filePath: currentFilePath } : null;
+  }
+
+  const repoInfo = getRepoInfo(fileUri);
+  if (!repoInfo) return null;
+  return {
+    repoInfo,
+    filePath: getRelativeFilePath(fileUri, repoInfo.rootPath),
+  };
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getCommandIssueNumber(item: ThreadCommandItem | number): number | undefined {
+  return typeof item === 'number' ? item : item.thread?.issueNumber;
+}
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log('mdcolab extension activated');
@@ -42,7 +86,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // --- Load comments for current file ---
   async function loadComments() {
     const editor = vscode.window.activeTextEditor;
-    if (!editor || editor.document.languageId !== 'markdown') {
+    if (!editor || !isSupportedMdcolabDocument(editor.document)) {
       currentThreads = [];
       treeProvider.setThreads([]);
       sharedFilesProvider.setCurrentFilePath(null);
@@ -75,7 +119,8 @@ export async function activate(context: vscode.ExtensionContext) {
       );
       treeProvider.setThreads(currentThreads);
 
-      // Apply decorations
+      // Apply source decorations for local text anchors. Rendered HTML anchors
+      // are highlighted by the web preview, not the VS Code source editor.
       const anchorRanges = findAnchorRanges(editor.document, currentThreads);
       applyDecorations(editor, anchorRanges, treeProvider.activeIssueNumber);
 
@@ -93,6 +138,11 @@ export async function activate(context: vscode.ExtensionContext) {
       const fileUri = uri ?? vscode.window.activeTextEditor?.document.uri;
       if (!fileUri) {
         vscode.window.showWarningMessage('Open a markdown file first');
+        return;
+      }
+      if (!isMarkdownDocumentUri(fileUri)) {
+        vscode.window.showInformationMessage('HTML files open in mdcolab web preview.');
+        vscode.commands.executeCommand('mdcolab.openInMdcolab');
         return;
       }
       MdcolabEditorPanel.open(context.extensionUri, fileUri);
@@ -152,14 +202,15 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Open in mdcolab
   context.subscriptions.push(
-    vscode.commands.registerCommand('mdcolab.openInMdcolab', () => {
-      if (!currentRepoInfo) {
+    vscode.commands.registerCommand('mdcolab.openInMdcolab', (uri?: vscode.Uri) => {
+      const active = resolveFileContext(uri);
+      if (!active) {
         vscode.window.showErrorMessage('Not a GitHub repository');
         return;
       }
       const config = vscode.workspace.getConfiguration('mdcolab');
       const baseUrl = config.get<string>('webAppUrl', 'https://ca-web-ai-preview.calmflower-64b2252f.eastus2.azurecontainerapps.io');
-      const url = buildMdcolabUrl(currentRepoInfo, currentFilePath, baseUrl);
+      const url = buildMdcolabUrl(active.repoInfo, active.filePath, baseUrl);
       vscode.env.openExternal(vscode.Uri.parse(url));
     })
   );
@@ -167,13 +218,14 @@ export async function activate(context: vscode.ExtensionContext) {
   // Share Link
   context.subscriptions.push(
     vscode.commands.registerCommand('mdcolab.shareLink', async () => {
-      if (!currentRepoInfo) {
+      const active = resolveFileContext();
+      if (!active) {
         vscode.window.showErrorMessage('Not a GitHub repository');
         return;
       }
       const config = vscode.workspace.getConfiguration('mdcolab');
       const baseUrl = config.get<string>('webAppUrl', 'https://ca-web-ai-preview.calmflower-64b2252f.eastus2.azurecontainerapps.io');
-      const url = buildMdcolabUrl(currentRepoInfo, currentFilePath, baseUrl);
+      const url = buildMdcolabUrl(active.repoInfo, active.filePath, baseUrl);
       await vscode.env.clipboard.writeText(url);
       vscode.window.showInformationMessage('mdcolab link copied to clipboard!');
     })
@@ -215,7 +267,7 @@ export async function activate(context: vscode.ExtensionContext) {
           if (!Array.isArray(pre.data) && pre.data.type === 'file' && pre.data.content) {
             const parsed = JSON.parse(
               Buffer.from(pre.data.content, 'base64').toString('utf-8')
-            ) as { documents?: Record<string, any> };
+            ) as { documents?: Record<string, SharingDocumentConfig> };
             existingDoc = parsed.documents?.[relativePath] ?? null;
           }
         } catch {
@@ -374,8 +426,8 @@ export async function activate(context: vscode.ExtensionContext) {
               documents: parsed.documents ?? {},
             };
           }
-        } catch (err: any) {
-          if (err.status !== 404) { throw err; }
+        } catch (err: unknown) {
+          if ((err as { status?: number }).status !== 404) { throw err; }
           // File doesn't exist yet — we'll create it
         }
 
@@ -452,8 +504,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Resolve Thread
   context.subscriptions.push(
-    vscode.commands.registerCommand('mdcolab.resolveThread', async (item: any) => {
-      const issueNumber = item?.thread?.issueNumber ?? item;
+    vscode.commands.registerCommand('mdcolab.resolveThread', async (item: ThreadCommandItem | number) => {
+      const issueNumber = getCommandIssueNumber(item);
       if (!currentRepoInfo || !issueNumber) { return; }
       try {
         await api.resolveThread(currentRepoInfo.owner, currentRepoInfo.repo, issueNumber);
@@ -467,8 +519,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Reopen Thread
   context.subscriptions.push(
-    vscode.commands.registerCommand('mdcolab.reopenThread', async (item: any) => {
-      const issueNumber = item?.thread?.issueNumber ?? item;
+    vscode.commands.registerCommand('mdcolab.reopenThread', async (item: ThreadCommandItem | number) => {
+      const issueNumber = getCommandIssueNumber(item);
       if (!currentRepoInfo || !issueNumber) { return; }
       try {
         await api.reopenThread(currentRepoInfo.owner, currentRepoInfo.repo, issueNumber);
@@ -494,7 +546,7 @@ export async function activate(context: vscode.ExtensionContext) {
           return;
         }
         const absPath = vscode.Uri.file(
-          require('path').join(rootPath, ...item.filePath.split('/'))
+          path.join(rootPath, ...item.filePath.split('/'))
         );
 
         await vscode.window.withProgress(
@@ -546,9 +598,10 @@ export async function activate(context: vscode.ExtensionContext) {
               vscode.window.showInformationMessage(
                 `Pushed ${item.filePath}.`
               );
-            } catch (err: any) {
+            } catch (err: unknown) {
               const stderr: string =
-                err?.stderr?.toString?.() ?? err?.message ?? String(err);
+                (err as { stderr?: { toString?: () => string } })?.stderr?.toString?.() ??
+                getErrorMessage(err);
               vscode.window.showErrorMessage(
                 `Save & push failed: ${stderr.trim()}`
               );
@@ -626,7 +679,7 @@ export async function activate(context: vscode.ExtensionContext) {
           return;
         }
         const abs = vscode.Uri.file(
-          require('path').join(rootPath, ...item.filePath.split('/'))
+          path.join(rootPath, ...item.filePath.split('/'))
         );
         await vscode.commands.executeCommand('revealInExplorer', abs);
       }
@@ -637,7 +690,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'mdcolab.copyThreadLink',
-      async (item: any) => {
+      async (item: ThreadCommandItem) => {
         const issueNumber = item?.thread?.issueNumber;
         if (!currentRepoInfo || !issueNumber) { return; }
         const url = `https://github.com/${currentRepoInfo.owner}/${currentRepoInfo.repo}/issues/${issueNumber}`;
@@ -651,7 +704,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'mdcolab.openThreadOnGitHub',
-      async (item: any) => {
+      async (item: ThreadCommandItem) => {
         const issueNumber = item?.thread?.issueNumber;
         if (!currentRepoInfo || !issueNumber) { return; }
         const url = `https://github.com/${currentRepoInfo.owner}/${currentRepoInfo.repo}/issues/${issueNumber}`;
@@ -714,7 +767,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (rootPath) {
           const localUri = vscode.Uri.file(
-            require('path').join(rootPath, ...item.filePath.split('/'))
+            path.join(rootPath, ...item.filePath.split('/'))
           );
           try {
             // Verify the file actually exists locally before opening
@@ -826,7 +879,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((doc) => {
-      if (doc.languageId === 'markdown') {
+      if (isSupportedMdcolabDocument(doc)) {
         loadComments().catch((err) =>
           console.error('loadComments failed:', err)
         );

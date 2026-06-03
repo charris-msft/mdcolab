@@ -29,9 +29,10 @@ export class DirtyTracker {
       // Also handle ReplaceAroundStep gap ranges
       const replaceAround = step as unknown as ReplaceAroundStep;
       if (replaceAround.gapFrom !== undefined && replaceAround.gapTo !== undefined) {
+        const replaceStep = step as ReplaceStep | ReplaceAroundStep;
         // The gap is the preserved content; the areas outside the gap are modified
-        affectedRanges.push({ from: (step as any).from, to: replaceAround.gapFrom });
-        affectedRanges.push({ from: replaceAround.gapTo, to: (step as any).to });
+        affectedRanges.push({ from: replaceStep.from, to: replaceAround.gapFrom });
+        affectedRanges.push({ from: replaceAround.gapTo, to: replaceStep.to });
       }
 
       // Map affected ranges to top-level block IDs

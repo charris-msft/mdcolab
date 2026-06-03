@@ -288,12 +288,12 @@
         },
         {
           "command": "mdcolab.openInMdcolab",
-          "when": "resourceLangId == markdown",
+          "when": "resourceLangId == markdown || resourceLangId == html",
           "group": "mdcolab"
         },
         {
           "command": "mdcolab.shareLink",
-          "when": "resourceLangId == markdown",
+          "when": "resourceLangId == markdown || resourceLangId == html",
           "group": "mdcolab"
         }
       ],
@@ -304,9 +304,14 @@
           "group": "mdcolab@0"
         },
         {
+          "command": "mdcolab.openInMdcolab",
+          "when": "resourceLangId == markdown || resourceLangId == html",
+          "group": "mdcolab@1"
+        },
+        {
           "command": "mdcolab.shareWithMdcolab",
-          "when": "resourceLangId == markdown",
-          "group": "mdcolab"
+          "when": "resourceLangId == markdown || resourceLangId == html",
+          "group": "mdcolab@2"
         }
       ],
       "editor/title": [
@@ -317,7 +322,7 @@
         },
         {
           "command": "mdcolab.refreshComments",
-          "when": "resourceLangId == markdown",
+          "when": "resourceLangId == markdown || resourceLangId == html",
           "group": "navigation"
         }
       ],
@@ -329,17 +334,17 @@
         },
         {
           "command": "mdcolab.openInMdcolab",
-          "when": "resourceLangId == markdown",
+          "when": "resourceLangId == markdown || resourceLangId == html",
           "group": "mdcolab@1"
         },
         {
           "command": "mdcolab.shareLink",
-          "when": "resourceLangId == markdown",
+          "when": "resourceLangId == markdown || resourceLangId == html",
           "group": "mdcolab@2"
         },
         {
           "command": "mdcolab.shareWithMdcolab",
-          "when": "resourceLangId == markdown",
+          "when": "resourceLangId == markdown || resourceLangId == html",
           "group": "mdcolab@3"
         }
       ],

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer } from "@tiptap/react";
+import { NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer, type NodeViewProps } from "@tiptap/react";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import mermaid from "mermaid";
 
@@ -30,8 +30,8 @@ mermaid.initialize({
 
 let mermaidCounter = 0;
 
-function MermaidNodeView(props: any) {
-  const { node, updateAttributes, extension } = props;
+function MermaidNodeView(props: NodeViewProps) {
+  const { node } = props;
   const language = node.attrs.language;
   const isMermaid = language === "mermaid";
   const [showSource, setShowSource] = useState(false);
@@ -73,8 +73,8 @@ function MermaidNodeView(props: any) {
       const { svg } = await mermaid.render(id, code);
       setSvgHtml(svg);
       setError("");
-    } catch (err: any) {
-      setError(err?.message || "Invalid mermaid syntax");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Invalid mermaid syntax");
       setSvgHtml("");
       const orphan = document.getElementById(`dmermaid-${mermaidCounter}`);
       orphan?.remove();
@@ -90,7 +90,7 @@ function MermaidNodeView(props: any) {
     return (
       <NodeViewWrapper className="code-block-wrapper">
         <pre>
-          <NodeViewContent as={"code" as any} />
+          <NodeViewContent />
         </pre>
       </NodeViewWrapper>
     );
@@ -139,7 +139,7 @@ function MermaidNodeView(props: any) {
 
       {showSource ? (
         <pre className="mermaid-source">
-          <NodeViewContent as={"code" as any} />
+          <NodeViewContent />
         </pre>
       ) : (
         <>
@@ -156,7 +156,7 @@ function MermaidNodeView(props: any) {
           ) : error ? (
             <div className="mermaid-error">
               <pre className="mermaid-source">
-                <NodeViewContent as={"code" as any} />
+                <NodeViewContent />
               </pre>
               <div className="mermaid-error-msg">⚠ {error}</div>
             </div>

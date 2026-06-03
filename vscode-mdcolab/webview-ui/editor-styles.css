@@ -874,13 +874,13 @@ body {
   text-align: center;
 }
 
-mark.find-highlight {
+.find-highlight {
   background: hsl(50 100% 50% / 0.3);
   border-radius: 2px;
   padding: 0;
 }
 
-mark.find-active {
+.find-active {
   background: hsl(30 100% 50% / 0.6);
   outline: 2px solid hsl(30 100% 50% / 0.8);
   border-radius: 2px;

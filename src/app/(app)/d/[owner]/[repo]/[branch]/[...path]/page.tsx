@@ -7,6 +7,7 @@ import { useEditorStore } from "@/stores/editor-store";
 import { useCommentStore } from "@/stores/comment-store";
 import { useAIStore } from "@/stores/ai-store";
 import { DocumentEditor } from "@/components/editor";
+import { HtmlPreview } from "@/components/html/html-preview";
 import { PresentationView } from "@/components/presentation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,7 @@ import { useComments } from "@/hooks/use-comments";
 import { useKeyboardShortcuts, SHORTCUTS } from "@/hooks/use-keyboard-shortcuts";
 import { useCommentNavigation } from "@/hooks/use-comment-navigation";
 import { addRecentDoc } from "@/lib/recent-docs";
+import { getDocumentKind } from "@/lib/document-types";
 
 export default function DocumentPage() {
   const router = useRouter();
@@ -68,6 +70,9 @@ export default function DocumentPage() {
   const branch = params.branch;
   const filePath = params.path.join("/");
   const fileName = params.path[params.path.length - 1];
+  const documentKind = getDocumentKind(filePath);
+  const isMarkdownDocument = documentKind === "markdown";
+  const isHtmlDocument = documentKind === "html";
 
   const [editMode, setEditMode] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
@@ -81,7 +86,7 @@ export default function DocumentPage() {
     login: (sessionAny?.login as string) ?? session?.user?.name ?? "anonymous",
     avatarUrl: session?.user?.image ?? "",
   };
-  const { isDirty, isSaving, setDirty, setSaving, setFilePath, setFileSha, fileSha, content: editorContent } =
+  const { isDirty, isSaving, setDirty, setSaving, setFilePath, setFileSha, setEditor, setContent, setEditable, setHybridSave, fileSha, content: editorContent } =
     useEditorStore();
   const { threads, isSidebarOpen, setSidebarOpen } = useCommentStore();
   const { isOpen: isAIOpen, togglePanel: toggleAIPanel } = useAIStore();
@@ -172,6 +177,15 @@ export default function DocumentPage() {
         setFileSha(fileData.sha);
         setDirty(false);
       }
+      if (!isMarkdownDocument) {
+        setEditor(null);
+        setEditable(false);
+        setHybridSave(null);
+        setContent(fileData.content);
+        setDirty(false);
+        setEditMode(false);
+        setPresentationMode(false);
+      }
       setFilePath(filePath);
       addRecentDoc({
         owner,
@@ -181,10 +195,10 @@ export default function DocumentPage() {
         fileName,
       }, author.login);
     }
-  }, [fileData, filePath, isDirty, setFileSha, setFilePath, setDirty, owner, repo, branch, fileName, author.login]);
+  }, [fileData, filePath, isDirty, setFileSha, setFilePath, setDirty, setEditor, setEditable, setHybridSave, setContent, owner, repo, branch, fileName, author.login, isMarkdownDocument]);
 
   // Save mutation
-  const saveMutation = useMutation({
+  const { mutate: saveDocument } = useMutation({
     mutationFn: async (content: string) => {
       const res = await fetch(
         `/api/save/${owner}/${repo}/${branch}/${filePath}`,
@@ -224,9 +238,9 @@ export default function DocumentPage() {
         toast.error("Nothing to save");
         return;
       }
-      saveMutation.mutate(markdown);
+      saveDocument(markdown);
     },
-    [canEdit, fileSha, saveMutation]
+    [canEdit, fileSha, saveDocument]
   );
 
   const handleCreateSlides = useCallback(async () => {
@@ -308,13 +322,6 @@ export default function DocumentPage() {
   const shortcuts = useMemo(
     () => [
       {
-        ...SHORTCUTS.SAVE,
-        handler: () => {
-          const content = useEditorStore.getState().content;
-          handleSave(content);
-        },
-      },
-      {
         ...SHORTCUTS.TOGGLE_SIDEBAR,
         handler: () => setSidebarOpen(!isSidebarOpen),
       },
@@ -334,13 +341,24 @@ export default function DocumentPage() {
         ...SHORTCUTS.AI_PANEL,
         handler: () => { if (copilotAvailable) toggleAIPanel(); },
       },
-      {
-        key: 'F5',
-        handler: () => setPresentationMode(true),
-        description: 'Present as slideshow',
-      },
+      ...(isMarkdownDocument
+        ? [
+            {
+              ...SHORTCUTS.SAVE,
+              handler: () => {
+                const content = useEditorStore.getState().content;
+                handleSave(content);
+              },
+            },
+            {
+              key: "F5",
+              handler: () => setPresentationMode(true),
+              description: "Present as slideshow",
+            },
+          ]
+        : []),
     ],
-    [handleSave, setSidebarOpen, isSidebarOpen, nextComment, prevComment, toggleAIPanel, setPresentationMode, copilotAvailable]
+    [handleSave, setSidebarOpen, isSidebarOpen, nextComment, prevComment, toggleAIPanel, setPresentationMode, copilotAvailable, isMarkdownDocument]
   );
   useKeyboardShortcuts(shortcuts);
 
@@ -501,7 +519,7 @@ export default function DocumentPage() {
 
         <div className="flex items-center gap-2">
           {/* Edit / Review toggle */}
-          {canEdit && (
+          {canEdit && isMarkdownDocument && (
             <div className="flex items-center rounded-md border border-border">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -535,6 +553,7 @@ export default function DocumentPage() {
           )}
 
           {/* Present */}
+          {isMarkdownDocument && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -549,9 +568,10 @@ export default function DocumentPage() {
             </TooltipTrigger>
             <TooltipContent>Present as slideshow</TooltipContent>
           </Tooltip>
+          )}
 
           {/* Create Slides */}
-          {session && copilotAvailable && (
+          {session && copilotAvailable && isMarkdownDocument && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -603,7 +623,7 @@ export default function DocumentPage() {
           )}
 
           {/* AI Assistant */}
-          {session && (
+          {session && isMarkdownDocument && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -682,10 +702,10 @@ export default function DocumentPage() {
             <TooltipContent>{isSidebarOpen ? "Close sidebar" : "Open sidebar"}</TooltipContent>
           </Tooltip>
 
-          {canEdit && editMode && <Separator orientation="vertical" className="h-6" />}
+          {canEdit && editMode && isMarkdownDocument && <Separator orientation="vertical" className="h-6" />}
 
           {/* Save indicator */}
-          {canEdit && editMode && (
+          {canEdit && editMode && isMarkdownDocument && (
           <div className="flex items-center gap-1.5 text-sm">
             {isSaving ? (
               <>
@@ -707,7 +727,7 @@ export default function DocumentPage() {
           )}
 
           {/* Manual save button */}
-          {canEdit && editMode && isDirty && (
+          {canEdit && editMode && isMarkdownDocument && isDirty && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -753,13 +773,21 @@ export default function DocumentPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Editor */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <DocumentEditor
-            initialContent={fileData.content}
-            editable={canEdit && editMode}
-            onSave={handleSave}
-            className="flex flex-col h-full"
-            author={author}
-          />
+          {isHtmlDocument ? (
+            <HtmlPreview
+              html={fileData.content}
+              fileSha={fileData.sha}
+              filePath={filePath}
+            />
+          ) : (
+            <DocumentEditor
+              initialContent={fileData.content}
+              editable={canEdit && editMode}
+              onSave={handleSave}
+              className="flex flex-col h-full"
+              author={author}
+            />
+          )}
         </div>
 
         {/* Comment Sidebar — Desktop: side panel, Mobile: bottom sheet */}
@@ -770,7 +798,7 @@ export default function DocumentPage() {
         )}
 
         {/* AI Chat Panel */}
-        {isAIOpen && copilotAvailable && (
+        {isAIOpen && copilotAvailable && isMarkdownDocument && (
           <AIChatPanel documentContent={editorContent || fileData.content} />
         )}
 
@@ -789,7 +817,7 @@ export default function DocumentPage() {
     </div>
 
     {/* Presentation Mode */}
-    {presentationMode && (
+    {presentationMode && isMarkdownDocument && (
       <PresentationView
         markdown={editorContent || fileData.content}
         onExit={() => setPresentationMode(false)}

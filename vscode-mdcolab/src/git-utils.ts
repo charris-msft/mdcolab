@@ -90,7 +90,7 @@ export function getRepoInfo(fileUri: vscode.Uri): RepoInfo | null {
   }
 }
 
-export function getRelativeFilePath(fileUri: vscode.Uri, repoRoot: string): string {
+export function getRelativeFilePath(fileUri: Pick<vscode.Uri, 'fsPath'>, repoRoot: string): string {
   return path.relative(repoRoot, fileUri.fsPath).replace(/\\/g, '/');
 }
 

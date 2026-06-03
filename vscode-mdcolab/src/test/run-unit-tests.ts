@@ -13,12 +13,26 @@ import Module from 'module';
 import Mocha from 'mocha';
 import { glob } from 'glob';
 
+type ModuleInternals = typeof Module & {
+  _resolveFilename: (
+    request: string,
+    parent: NodeModule | undefined,
+    isMain: boolean,
+    options?: unknown,
+  ) => string;
+  _load: (
+    request: string,
+    parent: NodeModule | undefined,
+    isMain: boolean,
+  ) => unknown;
+};
+
 // ── vscode shim ────────────────────────────────────────────────
 // Provide just enough surface so that `import * as vscode from 'vscode'`
 // at the top of git-utils.ts / github-api.ts / comment-decorations.ts
 // does not throw.
 
-const vscodeMock: Record<string, any> = {
+const vscodeMock: Record<string, unknown> = {
   Uri: { file: (p: string) => ({ fsPath: p }) },
   window: {
     createTextEditorDecorationType: () => ({}),
@@ -36,7 +50,7 @@ const vscodeMock: Record<string, any> = {
     }
   },
   ThemeIcon: class {
-    constructor(public id: string, public color?: any) {}
+    constructor(public id: string, public color?: unknown) {}
   },
   ThemeColor: class {
     constructor(public id: string) {}
@@ -53,8 +67,8 @@ const vscodeMock: Record<string, any> = {
   },
   Range: class {
     constructor(
-      public start: any,
-      public end: any,
+      public start: unknown,
+      public end: unknown,
     ) {}
   },
   Position: class {
@@ -77,8 +91,9 @@ const vscodeMock: Record<string, any> = {
 };
 
 // Intercept require('vscode') to return our mock
-const originalResolveFilename = (Module as any)._resolveFilename;
-(Module as any)._resolveFilename = function (request: string, parent: any, isMain: boolean, options: any) {
+const moduleInternals = Module as ModuleInternals;
+const originalResolveFilename = moduleInternals._resolveFilename;
+moduleInternals._resolveFilename = function (request: string, parent: NodeModule | undefined, isMain: boolean, options?: unknown) {
   if (request === 'vscode') {
     // Return a sentinel that we handle below
     return 'vscode';
@@ -86,8 +101,8 @@ const originalResolveFilename = (Module as any)._resolveFilename;
   return originalResolveFilename.call(this, request, parent, isMain, options);
 };
 
-const originalLoad = (Module as any)._load;
-(Module as any)._load = function (request: string, parent: any, isMain: boolean) {
+const originalLoad = moduleInternals._load;
+moduleInternals._load = function (request: string, parent: NodeModule | undefined, isMain: boolean) {
   if (request === 'vscode') {
     return vscodeMock;
   }

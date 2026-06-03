@@ -19,6 +19,7 @@ import { common, createLowlight } from "lowlight";
 import { Markdown } from "tiptap-markdown";
 import { CommentMark } from "./comment-mark";
 import { MermaidCodeBlock } from "./mermaid-block";
+import { SearchHighlight, getSearchResults } from "./search-highlight";
 
 // ─── Types ─────────────────────────────────────────────────────
 interface CommentAuthor {
@@ -60,6 +61,37 @@ const vscode = acquireVsCodeApi();
 
 const lowlight = createLowlight(common);
 
+interface ToolbarButtonProps {
+  onClick: () => void;
+  active?: boolean;
+  disabled?: boolean;
+  title: string;
+  children: React.ReactNode;
+}
+
+function Btn({
+  onClick,
+  active,
+  disabled,
+  title,
+  children,
+}: ToolbarButtonProps) {
+  return (
+    <button
+      className={`toolbar-btn ${active ? "active" : ""}`}
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Sep() {
+  return <span className="toolbar-sep" />;
+}
+
 // ─── Toolbar Component ────────────────────────────────────────
 function EditorToolbar({ editor, sidebarVisible, onToggleSidebar, onShare }: {
   editor: ReturnType<typeof useEditor>;
@@ -82,31 +114,6 @@ function EditorToolbar({ editor, sidebarVisible, onToggleSidebar, onShare }: {
   }, [editor]);
 
   if (!editor) return null;
-
-  const Btn = ({
-    onClick,
-    active,
-    disabled,
-    title,
-    children,
-  }: {
-    onClick: () => void;
-    active?: boolean;
-    disabled?: boolean;
-    title: string;
-    children: React.ReactNode;
-  }) => (
-    <button
-      className={`toolbar-btn ${active ? "active" : ""}`}
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-    >
-      {children}
-    </button>
-  );
-
-  const Sep = () => <span className="toolbar-sep" />;
 
   return (
     <div className="editor-toolbar">
@@ -293,7 +300,7 @@ function CommentSidebar({
         {filteredThreads.length === 0 ? (
           <div className="empty-state">
             <p>No comments yet</p>
-            <p className="hint">Select text in the editor and click "💬 Comment" to add one.</p>
+            <p className="hint">Select text in the editor and click &quot;💬 Comment&quot; to add one.</p>
           </div>
         ) : (
           filteredThreads.map((thread) => {
@@ -435,7 +442,7 @@ function relativeTime(dateStr: string): string {
 
 /** Render comment body with lightweight markdown: bold, italic, code, links, @mentions */
 function renderCommentBody(body: string): string {
-  let html = body
+  const html = body
     // Escape HTML first
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -496,6 +503,7 @@ function App() {
       MermaidCodeBlock.configure({ lowlight }),
       Markdown.configure({ html: false, transformCopiedText: true, transformPastedText: true }),
       CommentMark.configure({ HTMLAttributes: { class: "comment-highlight" } }),
+      SearchHighlight,
     ],
     content: "",
     editable: true,
@@ -755,42 +763,6 @@ function App() {
     }
   }, [editor]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+S to save
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-        e.preventDefault();
-        if (isDirty) {
-          vscode.postMessage({ type: "save", markdown: contentRef.current });
-        }
-      }
-      // Ctrl+Alt+M to comment
-      if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "m") {
-        e.preventDefault();
-        handleCreateComment();
-      }
-      // Ctrl+\ to toggle comment sidebar
-      if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
-        e.preventDefault();
-        setSidebarVisible((v) => !v);
-      }
-      // Ctrl+F to open find bar
-      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
-        e.preventDefault();
-        setShowFindBar(true);
-      }
-      // Escape to close find bar
-      if (e.key === "Escape" && showFindBar) {
-        setShowFindBar(false);
-        // Clear any browser highlight
-        window.getSelection()?.removeAllRanges();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isDirty, showFindBar]);
-
   // Ctrl+Scroll to zoom
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
@@ -845,6 +817,42 @@ function App() {
     setThreads((prev) => [...prev, draftThread]);
     setActiveThreadId(draftId);
   }, [editor]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (isDirty) {
+          vscode.postMessage({ type: "save", markdown: contentRef.current });
+        }
+      }
+      // Ctrl+Alt+M to comment
+      if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "m") {
+        e.preventDefault();
+        handleCreateComment();
+      }
+      // Ctrl+\ to toggle comment sidebar
+      if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
+        e.preventDefault();
+        setSidebarVisible((v) => !v);
+      }
+      // Ctrl+F to open find bar
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        setShowFindBar(true);
+      }
+      // Escape to close find bar
+      if (e.key === "Escape" && showFindBar) {
+        setShowFindBar(false);
+        // Clear any browser highlight
+        window.getSelection()?.removeAllRanges();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [handleCreateComment, isDirty, showFindBar]);
 
   // Click on comment marks to activate
   useEffect(() => {
@@ -947,7 +955,7 @@ function App() {
     <div className="app-container">
       <div className="editor-area">
         {editable && <EditorToolbar editor={editor} sidebarVisible={sidebarVisible} onToggleSidebar={() => setSidebarVisible((v) => !v)} onShare={() => vscode.postMessage({ type: "share" })} />}
-        {showFindBar && <FindBar onClose={() => setShowFindBar(false)} />}
+        {showFindBar && <FindBar editor={editor} onClose={() => setShowFindBar(false)} />}
         {/* Selection toolbar for commenting */}
         <SelectionToolbar editor={editor} onComment={handleCreateComment} />
         <div className="editor-scroll" style={{ zoom: zoomLevel / 100 }}>
@@ -987,8 +995,10 @@ function App() {
 
 // ─── Find Bar ──────────────────────────────────────────────────
 function FindBar({
+  editor,
   onClose,
 }: {
+  editor: ReturnType<typeof useEditor>;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -1002,123 +1012,63 @@ function FindBar({
     inputRef.current?.select();
   }, []);
 
-  const clearHighlights = useCallback(() => {
-    document.querySelectorAll("mark.find-highlight").forEach((el) => {
-      const parent = el.parentNode;
-      if (parent) {
-        parent.replaceChild(document.createTextNode(el.textContent || ""), el);
-        parent.normalize();
-      }
+  const scrollToActive = useCallback(() => {
+    if (!editor) return;
+    requestAnimationFrame(() => {
+      const active = editor.view.dom.querySelector(".find-active");
+      active?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
-  }, []);
+  }, [editor]);
 
-  // Clear highlights on unmount (covers all close paths)
+  const refreshState = useCallback(() => {
+    if (!editor) return;
+    const { count, active } = getSearchResults(editor);
+    setMatchCount(count);
+    setMatchIndex(active < 0 ? 0 : active);
+  }, [editor]);
+
+  // Clear search highlights on unmount (covers all close paths)
   useEffect(() => {
     return () => {
-      document.querySelectorAll("mark.find-highlight").forEach((el) => {
-        const parent = el.parentNode;
-        if (parent) {
-          parent.replaceChild(document.createTextNode(el.textContent || ""), el);
-          parent.normalize();
-        }
-      });
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      editor?.commands.clearSearch();
     };
-  }, []);
-
-  const doSearch = useCallback(
-    (searchText: string, jumpTo?: number) => {
-      clearHighlights();
-      if (!searchText.trim()) {
-        setMatchCount(0);
-        setMatchIndex(0);
-        return;
-      }
-
-      const editorEl = document.querySelector(".prose-editor");
-      if (!editorEl) return;
-
-      // Collect all text nodes first, then process matches
-      const textNodes: Text[] = [];
-      const walker = document.createTreeWalker(editorEl, NodeFilter.SHOW_TEXT);
-      while (walker.nextNode()) {
-        textNodes.push(walker.currentNode as Text);
-      }
-
-      const lowerQuery = searchText.toLowerCase();
-      const allMatches: { node: Text; start: number }[] = [];
-
-      for (const textNode of textNodes) {
-        const text = textNode.textContent || "";
-        let idx = text.toLowerCase().indexOf(lowerQuery);
-        while (idx !== -1) {
-          allMatches.push({ node: textNode, start: idx });
-          idx = text.toLowerCase().indexOf(lowerQuery, idx + 1);
-        }
-      }
-
-      setMatchCount(allMatches.length);
-      if (allMatches.length === 0) {
-        setMatchIndex(0);
-        return;
-      }
-
-      const target = jumpTo !== undefined ? jumpTo % allMatches.length : 0;
-      setMatchIndex(target);
-
-      // Highlight in reverse order using splitText to avoid cross-boundary issues
-      const processed = [...allMatches].reverse();
-      for (let i = 0; i < processed.length; i++) {
-        const { node, start } = processed[i];
-        const originalIndex = allMatches.length - 1 - i;
-        try {
-          // Split: [before][match][after]
-          const matchNode = node.splitText(start);
-          matchNode.splitText(searchText.length);
-          const mark = document.createElement("mark");
-          mark.className =
-            "find-highlight" + (originalIndex === target ? " find-active" : "");
-          matchNode.parentNode!.replaceChild(mark, matchNode);
-          mark.appendChild(matchNode);
-        } catch {
-          // Skip if split fails
-        }
-      }
-
-      const active = document.querySelector("mark.find-active");
-      active?.scrollIntoView({ behavior: "smooth", block: "center" });
-    },
-    [clearHighlights],
-  );
+  }, [editor]);
 
   const handleChange = (value: string) => {
     setQuery(value);
-    clearHighlights();
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!value.trim()) {
+      editor?.commands.clearSearch();
       setMatchCount(0);
       setMatchIndex(0);
       return;
     }
     debounceRef.current = window.setTimeout(() => {
-      doSearch(value, 0);
+      if (!editor) return;
+      editor.commands.setSearchTerm(value);
+      refreshState();
+      scrollToActive();
     }, 200);
   };
 
   const goNext = () => {
-    if (matchCount === 0) return;
-    const next = (matchIndex + 1) % matchCount;
-    doSearch(query, next);
+    if (!editor || matchCount === 0) return;
+    editor.commands.nextSearchResult();
+    refreshState();
+    scrollToActive();
   };
 
   const goPrev = () => {
-    if (matchCount === 0) return;
-    const prev = (matchIndex - 1 + matchCount) % matchCount;
-    doSearch(query, prev);
+    if (!editor || matchCount === 0) return;
+    editor.commands.prevSearchResult();
+    refreshState();
+    scrollToActive();
   };
 
   const handleClose = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    clearHighlights();
+    editor?.commands.clearSearch();
     onClose();
   };
 

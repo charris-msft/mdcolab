@@ -80,6 +80,7 @@ export function DocumentEditor({
       StarterKit.configure({
         codeBlock: false,
         horizontalRule: false,
+        link: false,
       }),
       Placeholder.configure({
         placeholder: "Start writing...",
@@ -232,13 +233,23 @@ export function DocumentEditor({
     });
   }, [editor, onSave]);
 
-  // Expose hybrid save for external callers (e.g. save button in page toolbar)
+  // Keep the latest hybrid-save callback in a ref so the registration effect
+  // below does not need to re-run (and re-write the store) on every render.
+  const performHybridSaveRef = useRef(performHybridSave);
   useEffect(() => {
-    if (editor) {
-      // Store the hybrid save function so the page can call it
-      useEditorStore.getState().setHybridSave?.(performHybridSave);
-    }
-  }, [editor, performHybridSave]);
+    performHybridSaveRef.current = performHybridSave;
+  }, [performHybridSave]);
+
+  // Expose hybrid save for external callers (e.g. save button in page toolbar).
+  // Register once per editor instance via a stable wrapper. Writing to the store
+  // here re-renders store subscribers; depending on `performHybridSave` directly
+  // would recreate it and re-trigger this effect, causing an infinite render loop.
+  useEffect(() => {
+    if (!editor) return;
+    const setHybridSave = useEditorStore.getState().setHybridSave;
+    setHybridSave(() => performHybridSaveRef.current());
+    return () => setHybridSave(null);
+  }, [editor]);
 
   // Keyboard shortcut: Cmd+S to save, Ctrl+Alt+M to comment
   useEffect(() => {

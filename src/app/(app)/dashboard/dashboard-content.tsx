@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import { Star, Clock, FileText, ArrowRight, ExternalLink, Lock, Globe } from "lucide-react";
@@ -56,11 +56,10 @@ export function DashboardContent() {
   const { data: session } = useSession();
   const sessionAny = session as unknown as Record<string, unknown> | null;
   const login = (sessionAny?.login as string) ?? session?.user?.name;
-  const [recentDocs, setRecentDocs] = useState<RecentDoc[]>([]);
-
-  useEffect(() => {
-    if (login) setRecentDocs(getRecentDocs(login));
-  }, [login]);
+  const recentDocs = useMemo<RecentDoc[]>(
+    () => (login ? getRecentDocs(login) : []),
+    [login]
+  );
 
   const { data: repos, isLoading, error } = useQuery<GitHubRepo[]>({
     queryKey: ["repos", "dashboard"],

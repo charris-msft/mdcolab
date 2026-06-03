@@ -2,20 +2,22 @@
 
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, Suspense } from "react";
 
 function SignInContent() {
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
   // Preserve the original URL so users land back where they came from after sign-in
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
-  const [message, setMessage] = useState("");
+  const message =
+    error === "OAuthCallback"
+      ? "App installed successfully! Signing you in..."
+      : "";
 
   useEffect(() => {
     // After GitHub App installation, GitHub redirects with setup_action param
     // which causes an OAuthCallback error. Auto-redirect to sign in.
     if (error === "OAuthCallback") {
-      setMessage("App installed successfully! Signing you in...");
       const timer = setTimeout(() => {
         signIn("github", { callbackUrl });
       }, 1500);

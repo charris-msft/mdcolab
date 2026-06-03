@@ -226,7 +226,7 @@ class ListCommentsTool
 
       const lines = filtered.map((t) => {
         const anchor =
-          t.anchor.type === 'text-range' && t.anchor.selectedText
+          t.anchor.type !== 'document' && t.anchor.selectedText
             ? `"${t.anchor.selectedText.slice(0, 60)}${t.anchor.selectedText.length > 60 ? '…' : ''}"`
             : '(document-level)';
         const replies =

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { GitHubFile, GitHubRepo } from "@/types";
+import { isHtmlDocument, isMarkdownDocument, isSupportedDocument } from "@/lib/document-types";
 
 interface FileBrowserContentProps {
   owner: string;
@@ -128,7 +129,7 @@ export function FileBrowserContent({ owner, repo }: FileBrowserContentProps) {
   function handleFileClick(file: GitHubFile) {
     if (file.type === "dir") {
       navigateToPath(file.path);
-    } else if (file.name.endsWith(".md") || file.name.endsWith(".mdx")) {
+    } else if (isSupportedDocument(file.name)) {
       router.push(`/d/${owner}/${repo}/${branch}/${file.path}`);
     }
   }
@@ -266,8 +267,9 @@ export function FileBrowserContent({ owner, repo }: FileBrowserContentProps) {
             </p>
           )}
           {files.map((file, idx) => {
-            const isMarkdown =
-              file.name.endsWith(".md") || file.name.endsWith(".mdx");
+            const isMarkdown = isMarkdownDocument(file.name);
+            const isHtml = isHtmlDocument(file.name);
+            const isSupported = isMarkdown || isHtml;
             return (
               <button
                 key={file.sha}
@@ -275,35 +277,37 @@ export function FileBrowserContent({ owner, repo }: FileBrowserContentProps) {
                 className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-muted/50 ${
                   idx > 0 ? "border-t border-border" : ""
                 } ${
-                  file.type === "file" && !isMarkdown
+                  file.type === "file" && !isSupported
                     ? "cursor-default opacity-60"
                     : ""
                 }`}
-                disabled={file.type === "file" && !isMarkdown}
+                disabled={file.type === "file" && !isSupported}
               >
                 {file.type === "dir" ? (
                   <Folder className="h-4 w-4 shrink-0 text-primary/70" />
                 ) : (
                   <FileText
                     className={`h-4 w-4 shrink-0 ${
-                      isMarkdown
-                        ? "text-green-500"
+                      isMarkdown || isHtml
+                        ? isHtml
+                          ? "text-orange-500"
+                          : "text-green-500"
                         : "text-muted-foreground/50"
                     }`}
                   />
                 )}
                 <span
                   className={
-                    file.type === "dir" || isMarkdown
+                    file.type === "dir" || isSupported
                       ? "text-foreground"
                       : "text-muted-foreground"
                   }
                 >
                   {file.name}
                 </span>
-                {isMarkdown && (
+                {isSupported && (
                   <span className="ml-auto text-xs text-primary/60">
-                    Open in editor →
+                    {isHtml ? "Open preview →" : "Open in editor →"}
                   </span>
                 )}
               </button>

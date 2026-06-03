@@ -10,6 +10,9 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
+    "vscode-mdcolab/out/**",
+    "vscode-mdcolab/webview-ui/**/*.js",
+    "vscode-mdcolab/webview-ui/**/*.d.ts",
     "build/**",
     "next-env.d.ts",
   ]),

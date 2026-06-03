@@ -27,6 +27,28 @@ param nextauthSecret string = ''
 @description('NextAuth.js URL')
 param nextauthUrl string = ''
 
+@description('Name of the web container app (the real production app consolidated under azd)')
+param webContainerAppName string = 'ca-web-ai-preview'
+
+@description('Whether the web container app already exists; preserves the running image on provision')
+param webExists bool = false
+
+@description('Node environment')
+param nodeEnv string = 'production'
+
+@description('GitHub App ID (non-secret)')
+param githubAppId string = ''
+
+@secure()
+@minLength(1)
+@description('GitHub App private key. Required: provision fails loudly if unset so it can never wipe the live secret.')
+param githubAppPrivateKey string
+
+@secure()
+@minLength(1)
+@description('Test password secret. Required: provision fails loudly if unset so it can never wipe the live secret.')
+param testPw string
+
 var abbrs = loadJsonContent('abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = {
@@ -86,13 +108,18 @@ module web 'modules/container-app.bicep' = {
   name: 'web'
   scope: rg
   params: {
-    name: '${abbrs.appContainerApps}web-${resourceToken}'
+    name: webContainerAppName
     location: location
     tags: union(tags, { 'azd-service-name': 'web' })
     containerAppsEnvironmentId: containerAppsEnvironment.outputs.id
     containerRegistryName: containerRegistry.outputs.name
     identityId: identity.outputs.id
     identityClientId: identity.outputs.clientId
+    exists: webExists
+    cpu: '1.0'
+    memory: '2Gi'
+    minReplicas: 1
+    maxReplicas: 3
     env: [
       {
         name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
@@ -115,6 +142,22 @@ module web 'modules/container-app.bicep' = {
         secretRef: 'github-client-secret'
       }
       {
+        name: 'GITHUB_APP_ID'
+        value: githubAppId
+      }
+      {
+        name: 'GITHUB_APP_PRIVATE_KEY'
+        secretRef: 'github-app-private-key'
+      }
+      {
+        name: 'TEST_PW'
+        secretRef: 'test-pw'
+      }
+      {
+        name: 'NODE_ENV'
+        value: nodeEnv
+      }
+      {
         name: 'PORT'
         value: '3000'
       }
@@ -131,6 +174,14 @@ module web 'modules/container-app.bicep' = {
       {
         name: 'nextauth-secret'
         value: nextauthSecret
+      }
+      {
+        name: 'github-app-private-key'
+        value: githubAppPrivateKey
+      }
+      {
+        name: 'test-pw'
+        value: testPw
       }
     ]
     targetPort: 3000

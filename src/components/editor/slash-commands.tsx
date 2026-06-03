@@ -3,7 +3,6 @@
 import {
   forwardRef,
   useCallback,
-  useEffect,
   useImperativeHandle,
   useState,
   type ComponentType,
@@ -131,10 +130,7 @@ interface SlashCommandListProps {
 export const SlashCommandList = forwardRef<SlashCommandListRef, SlashCommandListProps>(
   ({ items, command }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0);
-
-    useEffect(() => {
-      setSelectedIndex(0);
-    }, [items]);
+    const activeIndex = items[selectedIndex] ? selectedIndex : 0;
 
     const selectItem = useCallback(
       (index: number) => {
@@ -155,7 +151,7 @@ export const SlashCommandList = forwardRef<SlashCommandListRef, SlashCommandList
           return true;
         }
         if (event.key === "Enter") {
-          selectItem(selectedIndex);
+          selectItem(activeIndex);
           return true;
         }
         return false;
@@ -179,7 +175,7 @@ export const SlashCommandList = forwardRef<SlashCommandListRef, SlashCommandList
               key={item.title}
               onClick={() => selectItem(index)}
               className={`flex items-center gap-3 w-full rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
-                index === selectedIndex
+                index === activeIndex
                   ? "bg-primary/10 text-foreground"
                   : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
               }`}

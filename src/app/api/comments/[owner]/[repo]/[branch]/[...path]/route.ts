@@ -7,6 +7,8 @@ import type { CommentThread, CommentAnchor, Comment } from "@/types";
 
 const LABEL = "mdcolab";
 const LABEL_COLOR = "7B61FF";
+type OctokitClient = Awaited<ReturnType<typeof getOctokit>>;
+type SessionWithLogin = { login?: string; user?: { image?: string | null } };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -214,9 +216,8 @@ async function ensureLabelSafe(octokit: any, owner: string, repo: string, name: 
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchIssuesWithLabels(
-  octokit: any,
+  octokit: OctokitClient,
   owner: string,
   repo: string,
   labels: string
@@ -352,7 +353,7 @@ export async function GET(
     if ((isNotAuth || isAccessError) && isAppConfigured()) {
       try {
         const session = await auth().catch(() => null);
-        const login = (session as any)?.login ?? null;
+        const login = (session as SessionWithLogin | null)?.login ?? null;
         const { owner, repo, path: pathSegments } = await params;
         const filePath = pathSegments.join("/");
         const installationOctokit = await getInstallationOctokit(owner, repo);
@@ -427,7 +428,7 @@ export async function POST(
       if (isAppConfigured()) {
         try {
           const session = await auth().catch(() => null);
-          const login = (session as any)?.login ?? null;
+          const login = (session as SessionWithLogin | null)?.login ?? null;
           const isAnonymous = !login;
           const installationOctokit = await getInstallationOctokit(owner, repo);
           const { authorized } = await checkSharingAccess(installationOctokit, owner, repo, filePath, login);
@@ -659,8 +660,8 @@ export async function POST(
     if ((isNotAuth || isAccessError) && isAppConfigured()) {
       try {
         const session = await auth().catch(() => null);
-        const login = (session as any)?.login ?? null;
-        const avatarUrl = (session as any)?.user?.image ?? "";
+        const login = (session as SessionWithLogin | null)?.login ?? null;
+        const avatarUrl = (session as SessionWithLogin | null)?.user?.image ?? "";
         const isAnonymous = !login;
         const { owner, repo, path: pathSegments } = await params;
         const filePath = pathSegments.join("/");
