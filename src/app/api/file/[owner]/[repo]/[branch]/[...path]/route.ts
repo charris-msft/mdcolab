@@ -3,6 +3,8 @@ import { getOctokit } from "@/lib/github";
 import { auth } from "@/lib/auth";
 import { isAppConfigured, getInstallationId, getInstallationOctokit } from "@/lib/github-app";
 import { checkSharingAccess } from "@/lib/sharing-utils";
+
+type SessionWithLogin = { login?: string };
 import type { SharingConfig } from "@/lib/sharing-types";
 
 function determineShareReason(sharing: SharingConfig | null, filePath: string): string {
@@ -120,7 +122,7 @@ export async function GET(
       } else {
         try {
           const session = await auth();
-          const login = (session as any)?.login;
+          const login = (session as SessionWithLogin | null)?.login;
           const installationId = await getInstallationId(owner);
           if (!installationId) {
             reason = "app_not_installed";
@@ -151,7 +153,14 @@ export async function GET(
       }
 
       return NextResponse.json(
-        { error: "no_access", reason, owner, message: "You don't have access to this repository. Grant access via the GitHub App to view private repos." },
+        {
+          error: "no_access",
+          reason,
+          owner,
+          message: isAppConfigured()
+            ? "You don't have access to this repository. Grant access via the GitHub App to view private repos."
+            : "You don't have access to this repository, or it doesn't exist.",
+        },
         { status: 403 }
       );
     }

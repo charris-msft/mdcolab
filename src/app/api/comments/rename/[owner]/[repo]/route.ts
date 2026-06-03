@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getInstallationOctokit, isAppConfigured } from "@/lib/github-app";
-import { auth } from "@/lib/auth";
+import { getOctokit } from "@/lib/github";
+import { tryGetInstallationOctokit } from "@/lib/github-app";
 
 const LABEL = "mdcolab";
 const ANON_TAG = "mdcolab-anon";
@@ -38,17 +38,33 @@ export async function PATCH(
       return NextResponse.json({ error: "anonId and newDisplayName are required" }, { status: 400 });
     }
 
-    if (!isAppConfigured()) {
-      return NextResponse.json({ error: "Anonymous renames require the GitHub App" }, { status: 503 });
+    // Prefer the signed-in user's own token. The cascade rename rewrites issue
+    // and comment bodies, so it requires write (push) access. We pick the client
+    // once, up front, so the rename runs exactly once and counts stay accurate.
+    let octokit = null;
+    try {
+      const userOctokit = await getOctokit();
+      const { data: repoData } = await userOctokit.repos.get({ owner, repo });
+      if (repoData.permissions?.push) {
+        octokit = userOctokit;
+      }
+    } catch {
+      // Not authenticated or no access via the user token — fall back to the App.
     }
 
-    // Verify the user is allowed to act as this anonId.
-    // For anonymous users, we trust the localStorage anonId.
-    // For authenticated users, we still allow them to rename if they provide the anonId
-    // (they may have started anonymous and signed in later).
-    await auth().catch(() => null);
+    // The App is an opportunistic helper: anonymous users (and signed-in users
+    // without push access) rely on it, but its absence is transparent — we just
+    // report a normal access error below instead of anything App-specific.
+    if (!octokit) {
+      octokit = await tryGetInstallationOctokit(owner, repo);
+    }
 
-    const octokit = await getInstallationOctokit(owner, repo);
+    if (!octokit) {
+      return NextResponse.json(
+        { error: "You don't have access to rename comments in this repository." },
+        { status: 403 },
+      );
+    }
 
     // Find all mdcolab issues
     const issues: IssueLite[] = [];
