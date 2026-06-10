@@ -1,5 +1,10 @@
 import * as vscode from 'vscode';
 import { Octokit } from '@octokit/rest';
+import {
+  resolveStorageTarget,
+  sourceRepoLabel,
+  type StorageTarget,
+} from './central-storage.js';
 
 const LABEL = 'mdcolab';
 type GitHubIssue = Awaited<ReturnType<Octokit['issues']['listForRepo']>>['data'][number];
@@ -19,6 +24,8 @@ export interface CommentAnchor {
 export interface IssueMetadata {
   file: string;
   anchor: CommentAnchor;
+  /** Present when the issue is stored in a central repo for another repo. */
+  sourceRepo?: string;
 }
 
 export interface CommentThread {
@@ -431,23 +438,51 @@ export function extractCommentBody(body: string): string {
 }
 
 /** @internal exported for unit testing */
-export function buildIssueBody(anchor: CommentAnchor, commentBody: string, filePath: string): string {
+export function buildIssueBody(
+  anchor: CommentAnchor,
+  commentBody: string,
+  filePath: string,
+  sourceRepo?: string,
+): string {
   const meta: IssueMetadata = { file: filePath, anchor };
+  if (sourceRepo) { meta.sourceRepo = sourceRepo; }
   return `<!-- mdcolab-metadata\n${JSON.stringify(meta, null, 2)}\n-->\n\n${commentBody}`;
+}
+
+/**
+ * Comma-separated label filter for `issues.listForRepo`. In central mode the
+ * `source:<owner>/<repo>` label scopes results to a single source repository.
+ */
+function commentListLabels(target: StorageTarget): string {
+  if (target.mode === 'central') {
+    return `${LABEL},${sourceRepoLabel(target.source.owner, target.source.repo)}`;
+  }
+  return LABEL;
+}
+
+/** Label filter for the GitHub search API (labels with `:`/`/` are quoted). */
+function commentSearchLabels(target: StorageTarget): string {
+  if (target.mode === 'central') {
+    return `label:${LABEL} label:"${sourceRepoLabel(target.source.owner, target.source.repo)}"`;
+  }
+  return `label:${LABEL}`;
 }
 
 export async function fetchCommentThreads(owner: string, repo: string, filePath: string): Promise<CommentThread[]> {
   const octokit = await getOctokit(owner);
+  const target = await resolveStorageTarget(octokit, owner, repo);
+  const metaOwner = target.owner;
+  const metaRepo = target.repo;
   const threads: CommentThread[] = [];
 
-  // Try fetching by mdcolab label, then filter by file path in metadata
+  // Try fetching by label, then filter by file path in metadata
   try {
     const allIssues: GitHubIssue[] = [];
     for (const state of ['open', 'closed'] as const) {
       let page = 1;
       while (true) {
         const { data } = await octokit.issues.listForRepo({
-          owner, repo, labels: LABEL, state, per_page: 100, page,
+          owner: metaOwner, repo: metaRepo, labels: commentListLabels(target), state, per_page: 100, page,
         });
         if (data.length === 0) { break; }
         allIssues.push(...data);
@@ -468,7 +503,7 @@ export async function fetchCommentThreads(owner: string, repo: string, filePath:
       if (!meta) { continue; }
 
       const { data: comments } = await octokit.issues.listComments({
-        owner, repo, issue_number: issue.number, per_page: 100,
+        owner: metaOwner, repo: metaRepo, issue_number: issue.number, per_page: 100,
       });
 
       threads.push({
@@ -498,7 +533,7 @@ export async function fetchCommentThreads(owner: string, repo: string, filePath:
     try {
       const searchOctokit = await getOctokit(owner);
       const { data } = await searchOctokit.search.issuesAndPullRequests({
-        q: `repo:${owner}/${repo} is:issue label:${LABEL} "[mdcolab]" in:title`,
+        q: `repo:${metaOwner}/${metaRepo} is:issue ${commentSearchLabels(target)} "[mdcolab]" in:title`,
         per_page: 100,
       });
       for (const item of data.items) {
@@ -506,7 +541,7 @@ export async function fetchCommentThreads(owner: string, repo: string, filePath:
         if (!meta || meta.file !== filePath) { continue; }
 
         const { data: comments } = await searchOctokit.issues.listComments({
-          owner, repo, issue_number: item.number, per_page: 100,
+          owner: metaOwner, repo: metaRepo, issue_number: item.number, per_page: 100,
         });
 
         threads.push({
@@ -537,31 +572,48 @@ export async function fetchCommentThreads(owner: string, repo: string, filePath:
 export async function createCommentThread(
   owner: string, repo: string, filePath: string, anchor: CommentAnchor, body: string
 ): Promise<CommentThread | null> {
-  return withWriteAccess(owner, repo, async (octokit) => {
+  const target = await resolveStorageTarget(await getOctokit(owner), owner, repo);
+  const metaOwner = target.owner;
+  const metaRepo = target.repo;
+  const isCentral = target.mode === 'central';
+
+  return withWriteAccess(metaOwner, metaRepo, async (octokit) => {
     // Best-effort label creation
     const labels: string[] = [];
     try {
-      await octokit.issues.getLabel({ owner, repo, name: LABEL }).catch(async () => {
-        await octokit.issues.createLabel({ owner, repo, name: LABEL, color: '7B61FF', description: 'mdcolab comment threads' });
+      await octokit.issues.getLabel({ owner: metaOwner, repo: metaRepo, name: LABEL }).catch(async () => {
+        await octokit.issues.createLabel({ owner: metaOwner, repo: metaRepo, name: LABEL, color: '7B61FF', description: 'mdcolab comment threads' });
       });
       labels.push(LABEL);
     } catch { /* skip */ }
 
-    const pathLabel = `path:${filePath}`;
-    try {
-      await octokit.issues.getLabel({ owner, repo, name: pathLabel }).catch(async () => {
-        await octokit.issues.createLabel({ owner, repo, name: pathLabel, color: '0E8A16', description: `mdcolab path ${filePath}` });
-      });
-      labels.push(pathLabel);
-    } catch { /* skip */ }
+    if (isCentral) {
+      // Scope the issue to its source repo so listings stay per-repo.
+      const srcLabel = sourceRepoLabel(owner, repo);
+      try {
+        await octokit.issues.getLabel({ owner: metaOwner, repo: metaRepo, name: srcLabel }).catch(async () => {
+          await octokit.issues.createLabel({ owner: metaOwner, repo: metaRepo, name: srcLabel, color: '1D76DB', description: `mdcolab source ${owner}/${repo}` });
+        });
+        labels.push(srcLabel);
+      } catch { /* skip */ }
+    } else {
+      const pathLabel = `path:${filePath}`;
+      try {
+        await octokit.issues.getLabel({ owner: metaOwner, repo: metaRepo, name: pathLabel }).catch(async () => {
+          await octokit.issues.createLabel({ owner: metaOwner, repo: metaRepo, name: pathLabel, color: '0E8A16', description: `mdcolab path ${filePath}` });
+        });
+        labels.push(pathLabel);
+      } catch { /* skip */ }
+    }
 
     const selectedText = anchor.selectedText || 'General comment';
     const truncated = selectedText.length > 50 ? selectedText.slice(0, 50) + '…' : selectedText;
-    const title = `[mdcolab] "${truncated}" — ${filePath}`;
+    const titleSuffix = isCentral ? `${owner}/${repo}/${filePath}` : filePath;
+    const title = `[mdcolab] "${truncated}" — ${titleSuffix}`;
 
     const { data: issue } = await octokit.issues.create({
-      owner, repo, title,
-      body: buildIssueBody(anchor, body, filePath),
+      owner: metaOwner, repo: metaRepo, title,
+      body: buildIssueBody(anchor, body, filePath, isCentral ? `${owner}/${repo}` : undefined),
       labels: labels.length > 0 ? labels : undefined,
     });
 
@@ -580,9 +632,10 @@ export async function createCommentThread(
 }
 
 export async function replyToThread(owner: string, repo: string, issueNumber: number, body: string): Promise<CommentReply | null> {
-  return withWriteAccess(owner, repo, async (octokit) => {
+  const target = await resolveStorageTarget(await getOctokit(owner), owner, repo);
+  return withWriteAccess(target.owner, target.repo, async (octokit) => {
     const { data } = await octokit.issues.createComment({
-      owner, repo, issue_number: issueNumber, body,
+      owner: target.owner, repo: target.repo, issue_number: issueNumber, body,
     });
     return {
       id: data.id,
@@ -594,13 +647,15 @@ export async function replyToThread(owner: string, repo: string, issueNumber: nu
 }
 
 export async function resolveThread(owner: string, repo: string, issueNumber: number): Promise<void> {
-  await withWriteAccess(owner, repo, async (octokit) => {
-    await octokit.issues.update({ owner, repo, issue_number: issueNumber, state: 'closed' });
+  const target = await resolveStorageTarget(await getOctokit(owner), owner, repo);
+  await withWriteAccess(target.owner, target.repo, async (octokit) => {
+    await octokit.issues.update({ owner: target.owner, repo: target.repo, issue_number: issueNumber, state: 'closed' });
   });
 }
 
 export async function reopenThread(owner: string, repo: string, issueNumber: number): Promise<void> {
-  await withWriteAccess(owner, repo, async (octokit) => {
-    await octokit.issues.update({ owner, repo, issue_number: issueNumber, state: 'open' });
+  const target = await resolveStorageTarget(await getOctokit(owner), owner, repo);
+  await withWriteAccess(target.owner, target.repo, async (octokit) => {
+    await octokit.issues.update({ owner: target.owner, repo: target.repo, issue_number: issueNumber, state: 'open' });
   });
 }

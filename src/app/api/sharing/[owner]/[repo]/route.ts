@@ -5,9 +5,11 @@ import {
   getInstallationOctokit,
   isAppConfigured,
 } from "@/lib/github-app";
+import {
+  resolveStorageTarget,
+  resolveTargetForPrivacy,
+} from "@/lib/central-storage";
 import type { SharingConfig, SharingDocument } from "@/lib/sharing-types";
-
-const SHARING_PATH = ".mdcolab/sharing.json";
 
 export async function GET(
   _request: Request,
@@ -23,10 +25,11 @@ export async function GET(
   // Try with the user's own token first
   try {
     const octokit = await getOctokit();
+    const target = await resolveStorageTarget(octokit, owner, repo);
     const response = await octokit.repos.getContent({
-      owner,
-      repo,
-      path: SHARING_PATH,
+      owner: target.owner,
+      repo: target.repo,
+      path: target.sharingPath,
     });
 
     const data = response.data;
@@ -61,10 +64,11 @@ export async function GET(
 
   try {
     const installationOctokit = await getInstallationOctokit(owner, repo);
+    const target = await resolveStorageTarget(installationOctokit, owner, repo);
     const response = await installationOctokit.repos.getContent({
-      owner,
-      repo,
-      path: SHARING_PATH,
+      owner: target.owner,
+      repo: target.repo,
+      path: target.sharingPath,
     });
 
     const data = response.data;
@@ -110,8 +114,9 @@ export async function PUT(
 
   // Allow empty users for specific_people — author can add users later
 
-  // Permission check: user must have push access
+  // Permission check: user must have push access to the source repo
   const octokit = await getOctokit();
+  let target;
   try {
     const repoResponse = await octokit.repos.get({ owner, repo });
     if (!repoResponse.data.permissions?.push) {
@@ -120,6 +125,12 @@ export async function PUT(
         { status: 403 }
       );
     }
+    target = await resolveTargetForPrivacy(
+      octokit,
+      owner,
+      repo,
+      repoResponse.data.private === true
+    );
   } catch {
     return NextResponse.json(
       { error: "Write access required" },
@@ -135,9 +146,9 @@ export async function PUT(
 
   try {
     const response = await octokit.repos.getContent({
-      owner,
-      repo,
-      path: SHARING_PATH,
+      owner: target.owner,
+      repo: target.repo,
+      path: target.sharingPath,
     });
 
     const data = response.data;
@@ -151,11 +162,11 @@ export async function PUT(
     if (status === 403 && isAppConfigured()) {
       // Fallback to installation token for reading
       try {
-        const installationOctokit = await getInstallationOctokit(owner, repo);
+        const installationOctokit = await getInstallationOctokit(target.owner, target.repo);
         const response = await installationOctokit.repos.getContent({
-          owner,
-          repo,
-          path: SHARING_PATH,
+          owner: target.owner,
+          repo: target.repo,
+          path: target.sharingPath,
         });
 
         const data = response.data;
@@ -192,9 +203,9 @@ export async function PUT(
   // Write back
   try {
     const writeResponse = await octokit.repos.createOrUpdateFileContents({
-      owner,
-      repo,
-      path: SHARING_PATH,
+      owner: target.owner,
+      repo: target.repo,
+      path: target.sharingPath,
       message: `docs: update sharing for ${path}`,
       content: Buffer.from(JSON.stringify(config, null, 2)).toString("base64"),
       ...(fileSha ? { sha: fileSha } : {}),
@@ -233,8 +244,9 @@ export async function DELETE(
     );
   }
 
-  // Permission check: user must have push access
+  // Permission check: user must have push access to the source repo
   const octokit = await getOctokit();
+  let target;
   try {
     const repoResponse = await octokit.repos.get({ owner, repo });
     if (!repoResponse.data.permissions?.push) {
@@ -243,6 +255,12 @@ export async function DELETE(
         { status: 403 }
       );
     }
+    target = await resolveTargetForPrivacy(
+      octokit,
+      owner,
+      repo,
+      repoResponse.data.private === true
+    );
   } catch {
     return NextResponse.json(
       { error: "Write access required" },
@@ -256,9 +274,9 @@ export async function DELETE(
 
   try {
     const response = await octokit.repos.getContent({
-      owner,
-      repo,
-      path: SHARING_PATH,
+      owner: target.owner,
+      repo: target.repo,
+      path: target.sharingPath,
     });
 
     const data = response.data;
@@ -277,11 +295,11 @@ export async function DELETE(
     }
     if (status === 403 && isAppConfigured()) {
       try {
-        const installationOctokit = await getInstallationOctokit(owner, repo);
+        const installationOctokit = await getInstallationOctokit(target.owner, target.repo);
         const response = await installationOctokit.repos.getContent({
-          owner,
-          repo,
-          path: SHARING_PATH,
+          owner: target.owner,
+          repo: target.repo,
+          path: target.sharingPath,
         });
 
         const data = response.data;
@@ -312,18 +330,18 @@ export async function DELETE(
     if (remainingDocs === 0 && fileSha) {
       // No documents left — delete the file entirely
       await octokit.repos.deleteFile({
-        owner,
-        repo,
-        path: SHARING_PATH,
+        owner: target.owner,
+        repo: target.repo,
+        path: target.sharingPath,
         message: "docs: remove sharing config",
         sha: fileSha,
       });
     } else if (fileSha) {
       // Update the file with the entry removed
       await octokit.repos.createOrUpdateFileContents({
-        owner,
-        repo,
-        path: SHARING_PATH,
+        owner: target.owner,
+        repo: target.repo,
+        path: target.sharingPath,
         message: `docs: stop sharing ${path}`,
         content: Buffer.from(JSON.stringify(config, null, 2)).toString("base64"),
         sha: fileSha,

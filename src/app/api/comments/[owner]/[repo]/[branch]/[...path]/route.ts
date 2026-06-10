@@ -3,6 +3,7 @@ import { getOctokit } from "@/lib/github";
 import { auth } from "@/lib/auth";
 import { isAppConfigured, getInstallationOctokit } from "@/lib/github-app";
 import { checkSharingAccess } from "@/lib/sharing-utils";
+import { resolveStorageTarget, sourceRepoLabel, type StorageTarget } from "@/lib/central-storage";
 import type { CommentThread, CommentAnchor, Comment } from "@/types";
 
 const LABEL = "mdcolab";
@@ -19,11 +20,68 @@ interface IssueMetadata {
   anchor: CommentAnchor;
   anonymousAuthor?: { displayName: string; anonId?: string };
   proxyAuthor?: { login: string; avatarUrl: string };
+  /** Present when the issue is stored in a central repo for another repo. */
+  sourceRepo?: string;
 }
 
-function buildIssueBody(anchor: CommentAnchor, commentBody: string, filePath: string, anonymousAuthor?: { displayName: string; anonId?: string }, proxyAuthor?: { login: string; avatarUrl: string }): string {
-  const meta: IssueMetadata = { file: filePath, anchor, ...(anonymousAuthor && { anonymousAuthor }), ...(proxyAuthor && { proxyAuthor }) };
+function buildIssueBody(anchor: CommentAnchor, commentBody: string, filePath: string, anonymousAuthor?: { displayName: string; anonId?: string }, proxyAuthor?: { login: string; avatarUrl: string }, sourceRepo?: string): string {
+  const meta: IssueMetadata = { file: filePath, anchor, ...(anonymousAuthor && { anonymousAuthor }), ...(proxyAuthor && { proxyAuthor }), ...(sourceRepo && { sourceRepo }) };
   return `<!-- mdcolab-metadata\n${JSON.stringify(meta, null, 2)}\n-->\n\n${commentBody}`;
+}
+
+/**
+ * Build the labels used to create a comment issue. In central mode a
+ * `source:<owner>/<repo>` label scopes the issue to its origin repo; in-repo
+ * mode keeps the original `file:`/`path:` labels for efficient querying.
+ */
+async function buildCommentLabels(
+  octokit: OctokitClient,
+  target: StorageTarget,
+  filePath: string,
+): Promise<string[]> {
+  const labels: string[] = [];
+  if (await ensureLabelSafe(octokit, target.owner, target.repo, LABEL, LABEL_COLOR, "mdcolab comment threads")) {
+    labels.push(LABEL);
+  }
+  if (target.mode === "central") {
+    const srcLabel = sourceRepoLabel(target.source.owner, target.source.repo);
+    if (await ensureLabelSafe(octokit, target.owner, target.repo, srcLabel, "1D76DB", `mdcolab source ${target.source.owner}/${target.source.repo}`)) {
+      labels.push(srcLabel);
+    }
+  } else {
+    const fileLabel = `file:${filePath.split("/").pop() ?? filePath}`;
+    const pathLabel = `path:${filePath}`;
+    if (await ensureLabelSafe(octokit, target.owner, target.repo, fileLabel, "0E8A16", `mdcolab comments for ${filePath}`)) {
+      labels.push(fileLabel);
+    }
+    if (await ensureLabelSafe(octokit, target.owner, target.repo, pathLabel, "0E8A16", `mdcolab path ${filePath}`)) {
+      labels.push(pathLabel);
+    }
+  }
+  return labels;
+}
+
+/** Comma-separated label filter for primary issue listing. */
+function commentListLabels(target: StorageTarget, filePath: string): string {
+  if (target.mode === "central") {
+    return `${LABEL},${sourceRepoLabel(target.source.owner, target.source.repo)}`;
+  }
+  return `${LABEL},path:${filePath}`;
+}
+
+/** Label filter that matches any mdcolab issue for the target/source repo. */
+function commentScopeLabels(target: StorageTarget): string {
+  if (target.mode === "central") {
+    return `${LABEL},${sourceRepoLabel(target.source.owner, target.source.repo)}`;
+  }
+  return LABEL;
+}
+
+/** Title suffix for a new comment issue (includes source repo in central mode). */
+function commentTitleSuffix(target: StorageTarget, filePath: string): string {
+  return target.mode === "central"
+    ? `${target.source.owner}/${target.source.repo}/${filePath}`
+    : filePath;
 }
 
 function parseMetadata(body: string): IssueMetadata | null {
@@ -255,17 +313,21 @@ export async function GET(
     const { owner, repo, path: pathSegments } = await params;
     const filePath = pathSegments.join("/");
     const octokit = await getOctokit();
+    const target = await resolveStorageTarget(octokit, owner, repo);
+    const isCentral = target.mode === "central";
 
     // Strategy: Try path-specific label first, fall back to mdcolab-only label, then search.
     // Track whether any attempt threw an access error so we can fall through to the
     // sharing-access path instead of returning an empty list.
     let issues: GitHubIssue[] = [];
     let hadAccessError = false;
-    const pathLabel = `path:${filePath}`;
 
-    // Attempt 1: Filter by both mdcolab + path label (most efficient)
+    // Attempt 1: Filter by both mdcolab + path/source label (most efficient)
     try {
-      issues = await fetchIssuesWithLabels(octokit, owner, repo, `${LABEL},${pathLabel}`);
+      issues = await fetchIssuesWithLabels(octokit, target.owner, target.repo, commentListLabels(target, filePath));
+      if (isCentral) {
+        issues = issues.filter((issue) => parseMetadata(issue.body ?? "")?.file === filePath);
+      }
       console.log(`[comments GET] Attempt 1 (path label): found ${issues.length} issues for ${filePath}`);
     } catch (err) {
       console.log(`[comments GET] Attempt 1 failed:`, err instanceof Error ? err.message : err);
@@ -273,10 +335,10 @@ export async function GET(
       if (status === 403 || status === 404) hadAccessError = true;
     }
 
-    // Attempt 2: If no results, try mdcolab label only and filter by metadata
+    // Attempt 2: If no results, try the broader label set and filter by metadata
     if (issues.length === 0 && !hadAccessError) {
       try {
-        const allMdcolabIssues = await fetchIssuesWithLabels(octokit, owner, repo, LABEL);
+        const allMdcolabIssues = await fetchIssuesWithLabels(octokit, target.owner, target.repo, commentScopeLabels(target));
         console.log(`[comments GET] Attempt 2 (mdcolab label): found ${allMdcolabIssues.length} total mdcolab issues`);
         issues = allMdcolabIssues.filter((issue) => {
           const meta = parseMetadata(issue.body ?? "");
@@ -293,7 +355,7 @@ export async function GET(
     // Attempt 3: If still nothing, search all issues by title pattern
     if (issues.length === 0 && !hadAccessError) {
       try {
-        const searchQuery = `repo:${owner}/${repo} is:issue "[mdcolab]" in:title`;
+        const searchQuery = `repo:${target.owner}/${target.repo} is:issue "[mdcolab]" in:title`;
         const { data } = await octokit.search.issuesAndPullRequests({
           q: searchQuery,
           per_page: 100,
@@ -301,7 +363,9 @@ export async function GET(
         console.log(`[comments GET] Attempt 3 (search): found ${data.total_count} issues via search`);
         issues = data.items.filter((item) => {
           const meta = parseMetadata(item.body ?? "");
-          return meta?.file === filePath;
+          if (meta?.file !== filePath) return false;
+          if (isCentral && meta.sourceRepo !== `${owner}/${repo}`) return false;
+          return true;
         }) as unknown as GitHubIssue[];
         console.log(`[comments GET] Attempt 3: ${issues.length} issues matched file ${filePath}`);
       } catch (err) {
@@ -332,8 +396,8 @@ export async function GET(
     await Promise.all(
       issues.map(async (issue) => {
         const { data: comments } = await octokit.issues.listComments({
-          owner,
-          repo,
+          owner: target.owner,
+          repo: target.repo,
           issue_number: issue.number,
           per_page: 100,
         });
@@ -359,14 +423,18 @@ export async function GET(
         const installationOctokit = await getInstallationOctokit(owner, repo);
         const { authorized } = await checkSharingAccess(installationOctokit, owner, repo, filePath, login);
         if (authorized) {
+          const target = await resolveStorageTarget(installationOctokit, owner, repo);
+          const isCentral = target.mode === "central";
           let issues: GitHubIssue[] = [];
-          const pathLabel = `path:${filePath}`;
           try {
-            issues = await fetchIssuesWithLabels(installationOctokit, owner, repo, `${LABEL},${pathLabel}`);
+            issues = await fetchIssuesWithLabels(installationOctokit, target.owner, target.repo, commentListLabels(target, filePath));
+            if (isCentral) {
+              issues = issues.filter((issue) => parseMetadata(issue.body ?? "")?.file === filePath);
+            }
           } catch { /* ignore */ }
           if (issues.length === 0) {
             try {
-              const allIssues = await fetchIssuesWithLabels(installationOctokit, owner, repo, LABEL);
+              const allIssues = await fetchIssuesWithLabels(installationOctokit, target.owner, target.repo, commentScopeLabels(target));
               issues = allIssues.filter((issue) => {
                 const meta = parseMetadata(issue.body ?? "");
                 return meta?.file === filePath;
@@ -383,8 +451,8 @@ export async function GET(
           await Promise.all(
             issues.map(async (issue) => {
               const { data: comments } = await installationOctokit.issues.listComments({
-                owner,
-                repo,
+                owner: target.owner,
+                repo: target.repo,
                 issue_number: issue.number,
                 per_page: 100,
               });
@@ -433,6 +501,8 @@ export async function POST(
           const installationOctokit = await getInstallationOctokit(owner, repo);
           const { authorized } = await checkSharingAccess(installationOctokit, owner, repo, filePath, login);
           if (authorized) {
+            const target = await resolveStorageTarget(installationOctokit, owner, repo);
+            const isCentral = target.mode === "central";
             const action: string = body.action;
             const displayName: string = body.displayName || "Anonymous";
             const anonId: string | undefined = body.anonId;
@@ -440,21 +510,16 @@ export async function POST(
             if (action === "create") {
               const anchor: CommentAnchor = body.anchor;
               const commentBody: string = body.body;
-              const labels: string[] = [];
-              const fileLabel = `file:${filePath.split("/").pop() ?? filePath}`;
-              const pathLabel = `path:${filePath}`;
-              if (await ensureLabelSafe(installationOctokit, owner, repo, LABEL, LABEL_COLOR, "mdcolab comment threads")) labels.push(LABEL);
-              if (await ensureLabelSafe(installationOctokit, owner, repo, fileLabel, "0E8A16", `mdcolab comments for ${filePath}`)) labels.push(fileLabel);
-              if (await ensureLabelSafe(installationOctokit, owner, repo, pathLabel, "0E8A16", `mdcolab path ${filePath}`)) labels.push(pathLabel);
+              const labels = await buildCommentLabels(installationOctokit, target, filePath);
               const selectedText = anchor.selectedText || "General comment";
               const truncated = selectedText.length > 50 ? selectedText.slice(0, 50) + "…" : selectedText;
-              const title = `[mdcolab] "${truncated}" — ${filePath}`;
+              const title = `[mdcolab] "${truncated}" — ${commentTitleSuffix(target, filePath)}`;
               const anonAuthor = isAnonymous ? { displayName, anonId } : undefined;
               const { data: issue } = await installationOctokit.issues.create({
-                owner,
-                repo,
+                owner: target.owner,
+                repo: target.repo,
                 title,
-                body: buildIssueBody(anchor, commentBody, filePath, anonAuthor),
+                body: buildIssueBody(anchor, commentBody, filePath, anonAuthor, undefined, isCentral ? `${owner}/${repo}` : undefined),
                 labels: labels.length > 0 ? labels : undefined,
               });
               const thread: CommentThread = {
@@ -473,8 +538,8 @@ export async function POST(
               const commentBody: string = body.body;
               const finalBody = isAnonymous ? buildAnonCommentBody(commentBody, displayName, anonId) : commentBody;
               const { data: comment } = await installationOctokit.issues.createComment({
-                owner,
-                repo,
+                owner: target.owner,
+                repo: target.repo,
                 issue_number: issueNumber,
                 body: finalBody,
               });
@@ -487,8 +552,8 @@ export async function POST(
             if (action === "resolve" || action === "reopen") {
               const issueNumber: number = body.issueNumber;
               await installationOctokit.issues.update({
-                owner,
-                repo,
+                owner: target.owner,
+                repo: target.repo,
                 issue_number: issueNumber,
                 state: action === "resolve" ? "closed" : "open",
               });
@@ -503,35 +568,25 @@ export async function POST(
     }
 
     const action: string = body.action; // "create" | "reply" | "resolve" | "reopen"
+    const target = await resolveStorageTarget(octokit, owner, repo);
+    const isCentral = target.mode === "central";
 
     if (action === "create") {
       const anchor: CommentAnchor = body.anchor;
       const commentBody: string = body.body;
 
       // Best-effort label creation (may fail for non-write users)
-      const labels: string[] = [];
-      const fileLabel = `file:${filePath.split("/").pop() ?? filePath}`;
-      const pathLabel = `path:${filePath}`;
-
-      if (await ensureLabelSafe(octokit, owner, repo, LABEL, LABEL_COLOR, "mdcolab comment threads")) {
-        labels.push(LABEL);
-      }
-      if (await ensureLabelSafe(octokit, owner, repo, fileLabel, "0E8A16", `mdcolab comments for ${filePath}`)) {
-        labels.push(fileLabel);
-      }
-      if (await ensureLabelSafe(octokit, owner, repo, pathLabel, "0E8A16", `mdcolab path ${filePath}`)) {
-        labels.push(pathLabel);
-      }
+      const labels = await buildCommentLabels(octokit, target, filePath);
 
       const selectedText = anchor.selectedText || "General comment";
       const truncated = selectedText.length > 50 ? selectedText.slice(0, 50) + "…" : selectedText;
-      const title = `[mdcolab] "${truncated}" — ${filePath}`;
+      const title = `[mdcolab] "${truncated}" — ${commentTitleSuffix(target, filePath)}`;
 
       const { data: issue } = await octokit.issues.create({
-        owner,
-        repo,
+        owner: target.owner,
+        repo: target.repo,
         title,
-        body: buildIssueBody(anchor, commentBody, filePath),
+        body: buildIssueBody(anchor, commentBody, filePath, undefined, undefined, isCentral ? `${owner}/${repo}` : undefined),
         labels: labels.length > 0 ? labels : undefined,
       });
 
@@ -558,8 +613,8 @@ export async function POST(
       const commentBody: string = body.body;
 
       const { data: comment } = await octokit.issues.createComment({
-        owner,
-        repo,
+        owner: target.owner,
+        repo: target.repo,
         issue_number: issueNumber,
         body: commentBody,
       });
@@ -578,8 +633,8 @@ export async function POST(
     if (action === "resolve" || action === "reopen") {
       const issueNumber: number = body.issueNumber;
       await octokit.issues.update({
-        owner,
-        repo,
+        owner: target.owner,
+        repo: target.repo,
         issue_number: issueNumber,
         state: action === "resolve" ? "closed" : "open",
       });
@@ -590,8 +645,8 @@ export async function POST(
       const issueNumber: number = body.issueNumber;
       const issueType: "bug" | "feature" = body.issueType;
 
-      // Check write permission
-      const { data: repoData } = await octokit.repos.get({ owner, repo });
+      // Check write permission on the repo that holds the issue
+      const { data: repoData } = await octokit.repos.get({ owner: target.owner, repo: target.repo });
       if (!repoData.permissions?.push) {
         return NextResponse.json({ error: "Write access required to promote" }, { status: 403 });
       }
@@ -599,7 +654,7 @@ export async function POST(
       // Fetch the issue
       let issueData;
       try {
-        const resp = await octokit.issues.get({ owner, repo, issue_number: issueNumber });
+        const resp = await octokit.issues.get({ owner: target.owner, repo: target.repo, issue_number: issueNumber });
         issueData = resp.data;
       } catch (getErr: unknown) {
         const getStatus = typeof getErr === "object" && getErr !== null && "status" in getErr ? (getErr as { status: number }).status : 0;
@@ -618,12 +673,12 @@ export async function POST(
       const currentLabels: Array<{ name?: string }> = (issueData.labels ?? []) as Array<{ name?: string }>;
       const labelsToRemove = currentLabels
         .map((l) => l.name ?? "")
-        .filter((n) => n.startsWith("path:") || n.startsWith("file:"));
+        .filter((n) => n.startsWith("path:") || n.startsWith("file:") || n.startsWith("source:"));
 
       // Remove mdcolab labels
       for (const labelName of labelsToRemove) {
         try {
-          await octokit.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: labelName });
+          await octokit.issues.removeLabel({ owner: target.owner, repo: target.repo, issue_number: issueNumber, name: labelName });
         } catch {
           // Label may already be removed; ignore
         }
@@ -633,17 +688,17 @@ export async function POST(
       const newLabel = issueType === "bug" ? "bug" : "enhancement";
       const newLabelColor = issueType === "bug" ? "d73a4a" : "a2eeef";
       const newLabelDesc = issueType === "bug" ? "Something isn't working" : "New feature or request";
-      await ensureLabelSafe(octokit, owner, repo, newLabel, newLabelColor, newLabelDesc);
-      await octokit.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: [newLabel] });
+      await ensureLabelSafe(octokit, target.owner, target.repo, newLabel, newLabelColor, newLabelDesc);
+      await octokit.issues.addLabels({ owner: target.owner, repo: target.repo, issue_number: issueNumber, labels: [newLabel] });
 
       // Update the title
-      await octokit.issues.update({ owner, repo, issue_number: issueNumber, title: newTitle });
+      await octokit.issues.update({ owner: target.owner, repo: target.repo, issue_number: issueNumber, title: newTitle });
 
       // Add promotion comment
       const promoteMsg = `🔄 Promoted from mdcolab comment thread to ${issueType === "bug" ? "bug report" : "feature request"}.`;
-      await octokit.issues.createComment({ owner, repo, issue_number: issueNumber, body: promoteMsg });
+      await octokit.issues.createComment({ owner: target.owner, repo: target.repo, issue_number: issueNumber, body: promoteMsg });
 
-      return NextResponse.json({ ok: true, issueUrl: `https://github.com/${owner}/${repo}/issues/${issueNumber}` });
+      return NextResponse.json({ ok: true, issueUrl: `https://github.com/${target.owner}/${target.repo}/issues/${issueNumber}` });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
@@ -668,6 +723,8 @@ export async function POST(
         const installationOctokit = await getInstallationOctokit(owner, repo);
         const { authorized } = await checkSharingAccess(installationOctokit, owner, repo, filePath, login);
         if (authorized) {
+          const target = await resolveStorageTarget(installationOctokit, owner, repo);
+          const isCentral = target.mode === "central";
           const action: string = body.action;
           const displayName: string = body.displayName || "Anonymous";
           const anonId: string | undefined = body.anonId;
@@ -676,21 +733,16 @@ export async function POST(
           if (action === "create") {
             const anchor: CommentAnchor = body.anchor;
             const commentBody: string = body.body;
-            const labels: string[] = [];
-            const fileLabel = `file:${filePath.split("/").pop() ?? filePath}`;
-            const pathLabel = `path:${filePath}`;
-            if (await ensureLabelSafe(installationOctokit, owner, repo, LABEL, LABEL_COLOR, "mdcolab comment threads")) labels.push(LABEL);
-            if (await ensureLabelSafe(installationOctokit, owner, repo, fileLabel, "0E8A16", `mdcolab comments for ${filePath}`)) labels.push(fileLabel);
-            if (await ensureLabelSafe(installationOctokit, owner, repo, pathLabel, "0E8A16", `mdcolab path ${filePath}`)) labels.push(pathLabel);
+            const labels = await buildCommentLabels(installationOctokit, target, filePath);
             const selectedText = anchor.selectedText || "General comment";
             const truncated = selectedText.length > 50 ? selectedText.slice(0, 50) + "…" : selectedText;
-            const title = `[mdcolab] "${truncated}" — ${filePath}`;
+            const title = `[mdcolab] "${truncated}" — ${commentTitleSuffix(target, filePath)}`;
             const anonAuthor = isAnonymous ? { displayName, anonId } : undefined;
             const { data: issue } = await installationOctokit.issues.create({
-              owner,
-              repo,
+              owner: target.owner,
+              repo: target.repo,
               title,
-              body: buildIssueBody(anchor, commentBody, filePath, anonAuthor, proxyAuthor),
+              body: buildIssueBody(anchor, commentBody, filePath, anonAuthor, proxyAuthor, isCentral ? `${owner}/${repo}` : undefined),
               labels: labels.length > 0 ? labels : undefined,
             });
             const thread: CommentThread = {
@@ -714,8 +766,8 @@ export async function POST(
               finalBody = buildProxyCommentBody(commentBody, login, avatarUrl);
             }
             const { data: comment } = await installationOctokit.issues.createComment({
-              owner,
-              repo,
+              owner: target.owner,
+              repo: target.repo,
               issue_number: issueNumber,
               body: finalBody,
             });
@@ -728,8 +780,8 @@ export async function POST(
           if (action === "resolve" || action === "reopen") {
             const issueNumber: number = body.issueNumber;
             await installationOctokit.issues.update({
-              owner,
-              repo,
+              owner: target.owner,
+              repo: target.repo,
               issue_number: issueNumber,
               state: action === "resolve" ? "closed" : "open",
             });

@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getOctokit } from "@/lib/github";
 import { tryGetInstallationOctokit } from "@/lib/github-app";
+import {
+  resolveStorageTarget,
+  sourceRepoLabel,
+  inRepoTarget,
+} from "@/lib/central-storage";
 
 const LABEL = "mdcolab";
 const ANON_TAG = "mdcolab-anon";
@@ -42,9 +47,11 @@ export async function PATCH(
     // and comment bodies, so it requires write (push) access. We pick the client
     // once, up front, so the rename runs exactly once and counts stay accurate.
     let octokit = null;
+    let target = inRepoTarget(owner, repo);
     try {
       const userOctokit = await getOctokit();
-      const { data: repoData } = await userOctokit.repos.get({ owner, repo });
+      target = await resolveStorageTarget(userOctokit, owner, repo);
+      const { data: repoData } = await userOctokit.repos.get({ owner: target.owner, repo: target.repo });
       if (repoData.permissions?.push) {
         octokit = userOctokit;
       }
@@ -56,7 +63,7 @@ export async function PATCH(
     // without push access) rely on it, but its absence is transparent — we just
     // report a normal access error below instead of anything App-specific.
     if (!octokit) {
-      octokit = await tryGetInstallationOctokit(owner, repo);
+      octokit = await tryGetInstallationOctokit(target.owner, target.repo);
     }
 
     if (!octokit) {
@@ -66,15 +73,20 @@ export async function PATCH(
       );
     }
 
+    // In central mode, scope the cascade to the source repo's issues only.
+    const renameLabels = target.mode === "central"
+      ? `${LABEL},${sourceRepoLabel(target.source.owner, target.source.repo)}`
+      : LABEL;
+
     // Find all mdcolab issues
     const issues: IssueLite[] = [];
     for (const state of ["open", "closed"] as const) {
       let page = 1;
       while (true) {
         const { data } = await octokit.issues.listForRepo({
-          owner,
-          repo,
-          labels: LABEL,
+          owner: target.owner,
+          repo: target.repo,
+          labels: renameLabels,
           state,
           per_page: 100,
           page,
@@ -103,8 +115,8 @@ export async function PATCH(
               `<!-- mdcolab-metadata\n${JSON.stringify(meta, null, 2)}\n-->`,
             );
             await octokit.issues.update({
-              owner,
-              repo,
+              owner: target.owner,
+              repo: target.repo,
               issue_number: issue.number,
               body: newBody,
             });
@@ -117,8 +129,8 @@ export async function PATCH(
 
       // Check the issue comments (replies)
       const { data: comments } = await octokit.issues.listComments({
-        owner,
-        repo,
+        owner: target.owner,
+        repo: target.repo,
         issue_number: issue.number,
         per_page: 100,
       });
@@ -136,8 +148,8 @@ export async function PATCH(
               `<!-- ${ANON_TAG} ${JSON.stringify(data)} -->`,
             );
             await octokit.issues.updateComment({
-              owner,
-              repo,
+              owner: target.owner,
+              repo: target.repo,
               comment_id: c.id,
               body: newBody,
             });

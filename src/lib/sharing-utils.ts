@@ -1,7 +1,6 @@
 import type { Octokit } from "@octokit/rest";
 import type { SharingConfig } from "@/lib/sharing-types";
-
-const SHARING_PATH = ".mdcolab/sharing.json";
+import { resolveStorageTarget } from "@/lib/central-storage";
 
 export async function checkSharingAccess(
   installationOctokit: Octokit,
@@ -11,10 +10,11 @@ export async function checkSharingAccess(
   userLogin: string | null | undefined
 ): Promise<{ authorized: boolean; allowEditing: boolean; sharing: SharingConfig | null }> {
   try {
+    const target = await resolveStorageTarget(installationOctokit, owner, repo);
     const response = await installationOctokit.repos.getContent({
-      owner,
-      repo,
-      path: SHARING_PATH,
+      owner: target.owner,
+      repo: target.repo,
+      path: target.sharingPath,
     });
 
     const data = response.data;
@@ -71,10 +71,11 @@ export async function checkAnySharingAccess(
   userLogin: string | null | undefined
 ): Promise<{ authorized: boolean; sharing: SharingConfig | null }> {
   try {
+    const target = await resolveStorageTarget(installationOctokit, owner, repo);
     const response = await installationOctokit.repos.getContent({
-      owner,
-      repo,
-      path: SHARING_PATH,
+      owner: target.owner,
+      repo: target.repo,
+      path: target.sharingPath,
     });
 
     const data = response.data;

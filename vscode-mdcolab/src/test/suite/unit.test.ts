@@ -133,6 +133,19 @@ suite('github-api helpers', () => {
       assert.deepStrictEqual(meta?.anchor.selectedText, 'hello world');
       assert.strictEqual(extractCommentBody(body), 'Round trip');
     });
+
+    test('embeds sourceRepo when provided (central mode)', () => {
+      const body = buildIssueBody(sampleAnchor, 'Central', 'file.md', 'acme/private-docs');
+      const meta = parseMetadata(body);
+      assert.strictEqual(meta?.sourceRepo, 'acme/private-docs');
+      assert.strictEqual(extractCommentBody(body), 'Central');
+    });
+
+    test('omits sourceRepo when not provided (in-repo mode)', () => {
+      const body = buildIssueBody(sampleAnchor, 'InRepo', 'file.md');
+      const meta = parseMetadata(body);
+      assert.strictEqual(meta?.sourceRepo, undefined);
+    });
   });
 
   suite('isAccessError', () => {
@@ -152,6 +165,65 @@ suite('github-api helpers', () => {
       assert.strictEqual(isAccessError(new Error('boom')), false);
       assert.strictEqual(isAccessError(null), false);
       assert.strictEqual(isAccessError(undefined), false);
+    });
+  });
+});
+
+// ─── central-storage pure-function tests ───────────────────────
+import {
+  centralSharingPath,
+  sourceRepoLabel,
+  decideCentral,
+  inRepoTarget,
+  centralTarget,
+  IN_REPO_SHARING_PATH,
+  CENTRAL_REPO_NAME,
+} from '../../central-storage.js';
+
+suite('central-storage helpers', () => {
+  suite('centralSharingPath', () => {
+    test('builds per-source-repo path', () => {
+      assert.strictEqual(
+        centralSharingPath('acme', 'private-docs'),
+        'shares/acme/private-docs/sharing.json',
+      );
+    });
+  });
+
+  suite('sourceRepoLabel', () => {
+    test('builds a source-scoped label', () => {
+      assert.strictEqual(sourceRepoLabel('acme', 'private-docs'), 'source:acme/private-docs');
+    });
+  });
+
+  suite('decideCentral', () => {
+    test('central only when private AND central repo exists', () => {
+      assert.strictEqual(decideCentral(true, true), true);
+      assert.strictEqual(decideCentral(true, false), false);
+      assert.strictEqual(decideCentral(false, true), false);
+      assert.strictEqual(decideCentral(false, false), false);
+    });
+  });
+
+  suite('inRepoTarget', () => {
+    test('targets the source repo with the in-repo path', () => {
+      const t = inRepoTarget('acme', 'docs');
+      assert.strictEqual(t.mode, 'in-repo');
+      assert.strictEqual(t.owner, 'acme');
+      assert.strictEqual(t.repo, 'docs');
+      assert.strictEqual(t.sharingPath, IN_REPO_SHARING_PATH);
+      assert.deepStrictEqual(t.source, { owner: 'acme', repo: 'docs' });
+    });
+  });
+
+  suite('centralTarget', () => {
+    test('targets <owner>/mdcolab with a per-source path', () => {
+      const t = centralTarget('acme', 'private-docs');
+      assert.strictEqual(t.mode, 'central');
+      assert.strictEqual(t.owner, 'acme');
+      assert.strictEqual(t.repo, CENTRAL_REPO_NAME);
+      assert.strictEqual(t.sharingPath, 'shares/acme/private-docs/sharing.json');
+      assert.deepStrictEqual(t.source, { owner: 'acme', repo: 'private-docs' });
     });
   });
 });

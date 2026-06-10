@@ -10,6 +10,7 @@ import {
 } from './shared-files-tree.js';
 import { MdcolabEditorPanel } from './mdcolab-editor-panel.js';
 import { registerCopilotTools } from './copilot-tools.js';
+import { resolveStorageTarget } from './central-storage.js';
 
 // State
 let currentThreads: api.CommentThread[] = [];
@@ -273,10 +274,11 @@ export async function activate(context: vscode.ExtensionContext) {
         // Shared Files view may not yet be loaded for this repo — fetch inline.
         try {
           const octokitPre = await api.getOctokit(repoInfo.owner);
+          const targetPre = await resolveStorageTarget(octokitPre, repoInfo.owner, repoInfo.repo);
           const pre = await octokitPre.repos.getContent({
-            owner: repoInfo.owner,
-            repo: repoInfo.repo,
-            path: '.mdcolab/sharing.json',
+            owner: targetPre.owner,
+            repo: targetPre.repo,
+            path: targetPre.sharingPath,
           });
           if (!Array.isArray(pre.data) && pre.data.type === 'file' && pre.data.content) {
             const parsed = JSON.parse(
@@ -396,7 +398,9 @@ export async function activate(context: vscode.ExtensionContext) {
       const allowEditing = editingPick.value;
 
       try {
-        await api.withContentWriteAccess(repoInfo.owner, repoInfo.repo, async (octokit) => {
+        const octokitTarget = await api.getOctokit(repoInfo.owner);
+        const target = await resolveStorageTarget(octokitTarget, repoInfo.owner, repoInfo.repo);
+        await api.withContentWriteAccess(target.owner, target.repo, async (octokit) => {
           // Identify the current user for sharedBy
           let sharedBy = 'unknown';
           try {
@@ -404,9 +408,9 @@ export async function activate(context: vscode.ExtensionContext) {
             sharedBy = data.login;
           } catch { /* best-effort */ }
 
-          // Read existing .mdcolab/sharing.json (if any). Always read-merge-write
+          // Read existing sharing.json (if any). Always read-merge-write
           // so we never clobber entries for other documents.
-          const sharingPath = '.mdcolab/sharing.json';
+          const sharingPath = target.sharingPath;
           let existingSha: string | undefined;
           interface SharingDocument {
             mode: SharingMode;
@@ -424,8 +428,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
           try {
             const { data } = await octokit.repos.getContent({
-              owner: repoInfo.owner,
-              repo: repoInfo.repo,
+              owner: target.owner,
+              repo: target.repo,
               path: sharingPath,
             });
             if (!Array.isArray(data) && data.type === 'file' && data.content) {
@@ -457,8 +461,8 @@ export async function activate(context: vscode.ExtensionContext) {
           ).toString('base64');
 
           await octokit.repos.createOrUpdateFileContents({
-            owner: repoInfo.owner,
-            repo: repoInfo.repo,
+            owner: target.owner,
+            repo: target.repo,
             path: sharingPath,
             message: `docs: update sharing for ${relativePath}`,
             content: updatedContent,
@@ -825,14 +829,20 @@ export async function activate(context: vscode.ExtensionContext) {
         );
         if (confirm !== 'Stop sharing') { return; }
         try {
-          await api.withContentWriteAccess(
+          const octokitTarget = await api.getOctokit(item.repoContext.owner);
+          const target = await resolveStorageTarget(
+            octokitTarget,
             item.repoContext.owner,
             item.repoContext.repo,
+          );
+          await api.withContentWriteAccess(
+            target.owner,
+            target.repo,
             async (octokit) => {
-              const sharingPath = '.mdcolab/sharing.json';
+              const sharingPath = target.sharingPath;
               const { data } = await octokit.repos.getContent({
-                owner: item.repoContext.owner,
-                repo: item.repoContext.repo,
+                owner: target.owner,
+                repo: target.repo,
                 path: sharingPath,
               });
               if (Array.isArray(data) || data.type !== 'file' || !data.content) {
@@ -847,16 +857,16 @@ export async function activate(context: vscode.ExtensionContext) {
               const remaining = Object.keys(parsed.documents).length;
               if (remaining === 0) {
                 await octokit.repos.deleteFile({
-                  owner: item.repoContext.owner,
-                  repo: item.repoContext.repo,
+                  owner: target.owner,
+                  repo: target.repo,
                   path: sharingPath,
                   message: 'docs: remove sharing config',
                   sha: data.sha,
                 });
               } else {
                 await octokit.repos.createOrUpdateFileContents({
-                  owner: item.repoContext.owner,
-                  repo: item.repoContext.repo,
+                  owner: target.owner,
+                  repo: target.repo,
                   path: sharingPath,
                   message: `docs: stop sharing ${item.filePath}`,
                   content: Buffer.from(

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as api from './github-api.js';
 import { getRepoInfo, getFileStatus, FileStatus, RepoInfo } from './git-utils.js';
+import { resolveStorageTarget } from './central-storage.js';
 
 export interface SharingDocument {
   mode: 'anyone_with_link' | 'specific_people';
@@ -128,13 +129,18 @@ export class SharedFilesTreeProvider
     this._onDidChangeTreeData.fire();
     try {
       const octokit = await api.getOctokit(this.repoContext.owner);
+      const target = await resolveStorageTarget(
+        octokit,
+        this.repoContext.owner,
+        this.repoContext.repo,
+      );
       // Don't pin to the user's local branch — sharing.json lives on the
-      // repo's default branch; the caller's working branch may not contain
-      // the file at all. Omitting `ref` uses the default branch.
+      // metadata repo's default branch; the caller's working branch may not
+      // contain the file at all. Omitting `ref` uses the default branch.
       const { data } = await octokit.repos.getContent({
-        owner: this.repoContext.owner,
-        repo: this.repoContext.repo,
-        path: '.mdcolab/sharing.json',
+        owner: target.owner,
+        repo: target.repo,
+        path: target.sharingPath,
       });
       if (!Array.isArray(data) && data.type === 'file' && data.content) {
         const decoded = Buffer.from(data.content, 'base64').toString('utf-8');

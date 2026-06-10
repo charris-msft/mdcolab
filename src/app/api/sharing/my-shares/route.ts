@@ -4,9 +4,8 @@ import {
   getInstallationOctokit,
   isAppConfigured,
 } from "@/lib/github-app";
+import { resolveTargetForPrivacy } from "@/lib/central-storage";
 import type { SharingConfig } from "@/lib/sharing-types";
-
-const SHARING_PATH = ".mdcolab/sharing.json";
 
 export interface SharedDocItem {
   owner: string;
@@ -46,12 +45,20 @@ export async function GET() {
       const owner = repo.owner.login;
       const repoName = repo.name;
 
+      // Route private repos to the central metadata repo when one exists.
+      const target = await resolveTargetForPrivacy(
+        octokit,
+        owner,
+        repoName,
+        repo.private === true
+      );
+
       try {
         // Try user token first
         const response = await octokit.repos.getContent({
-          owner,
-          repo: repoName,
-          path: SHARING_PATH,
+          owner: target.owner,
+          repo: target.repo,
+          path: target.sharingPath,
         });
 
         const data = response.data;
@@ -83,11 +90,11 @@ export async function GET() {
         // Try installation token fallback
         if (status === 403 && isAppConfigured()) {
           try {
-            const installationOctokit = await getInstallationOctokit(owner, repoName);
+            const installationOctokit = await getInstallationOctokit(target.owner, target.repo);
             const response = await installationOctokit.repos.getContent({
-              owner,
-              repo: repoName,
-              path: SHARING_PATH,
+              owner: target.owner,
+              repo: target.repo,
+              path: target.sharingPath,
             });
 
             const data = response.data;
