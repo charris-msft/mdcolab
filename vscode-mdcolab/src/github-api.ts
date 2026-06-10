@@ -85,6 +85,18 @@ export function isAccessError(err: unknown): boolean {
 interface RepoAccessResult {
   ok: boolean;
   reason?: string;
+  requiresPrivateRepoAccess?: boolean;
+}
+
+export class GitHubRepoAccessError extends Error {
+  constructor(message: string, readonly requiresPrivateRepoAccess = false) {
+    super(message);
+    this.name = 'GitHubRepoAccessError';
+  }
+}
+
+export function isPrivateRepoAccessRequiredError(err: unknown): err is GitHubRepoAccessError {
+  return err instanceof GitHubRepoAccessError && err.requiresPrivateRepoAccess;
 }
 
 /**
@@ -111,6 +123,35 @@ async function checkRepoIssueAccess(octokit: Octokit, owner: string, repo: strin
     }
     // Non-access error (e.g. network): let the real operation surface it.
     return { ok: true };
+  }
+}
+
+async function checkRepoContentWriteAccess(octokit: Octokit, owner: string, repo: string): Promise<RepoAccessResult> {
+  try {
+    const { data } = await octokit.repos.get({ owner, repo });
+    const p = data.permissions;
+    if (p && !(p.admin || p.maintain || p.push)) {
+      return { ok: false, reason: 'This account does not have permission to update files in this repository.' };
+    }
+    return { ok: true };
+  } catch (err) {
+    if (!isAccessError(err)) {
+      return { ok: true };
+    }
+
+    const hasPrivateScope = vscode.workspace
+      .getConfiguration('mdcolab')
+      .get<boolean>('privateRepoAccess', false);
+
+    if (!hasPrivateScope) {
+      return {
+        ok: false,
+        requiresPrivateRepoAccess: true,
+        reason: 'This repository may be private or inaccessible with the current public-only GitHub permission.',
+      };
+    }
+
+    return { ok: false, reason: 'This account cannot access the repository.' };
   }
 }
 
@@ -199,8 +240,14 @@ type AccountQuickPickItem = vscode.QuickPickItem & {
   signIn?: boolean;
 };
 
+type RepoAccessChecker = (
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+) => Promise<RepoAccessResult>;
+
 /**
- * Prompts the user to pick a GitHub account that can create/manage issues in
+ * Prompts the user to pick a GitHub account that has the requested access to
  * owner/repo. They may choose any account already connected to VS Code, or sign
  * in with a new one. The chosen account is verified against the repo and
  * remembered for the owner. Returns an authenticated Octokit, or null if the
@@ -210,9 +257,11 @@ export async function promptAccountForAccess(
   owner: string,
   repo: string,
   reason?: string,
+  checkAccess: RepoAccessChecker = checkRepoIssueAccess,
+  accessDescription = 'issue access',
 ): Promise<Octokit | null> {
   const scopes = getScopes();
-  let detail = reason ?? `The signed-in GitHub account can't create comments (issues) in ${owner}/${repo}.`;
+  let detail = reason ?? `The signed-in GitHub account does not have ${accessDescription} to ${owner}/${repo}.`;
 
   while (true) {
     let accounts: readonly vscode.AuthenticationSessionAccountInformation[] = [];
@@ -244,7 +293,7 @@ export async function promptAccountForAccess(
     try {
       if (pick.signIn) {
         session = await vscode.authentication.getSession('github', scopes, {
-          forceNewSession: { detail: `Sign in to an account with issue access to ${owner}/${repo}.` },
+          forceNewSession: { detail: `Sign in to an account with ${accessDescription} to ${owner}/${repo}.` },
         });
       } else {
         // createIfNone lets VS Code mint a session for the requested scopes
@@ -262,7 +311,7 @@ export async function promptAccountForAccess(
     }
 
     const octokit = new Octokit({ auth: session.accessToken });
-    const access = await checkRepoIssueAccess(octokit, owner, repo);
+    const access = await checkAccess(octokit, owner, repo);
     if (access.ok) {
       setAccountOverride(owner, session.account);
       return octokit;
@@ -274,6 +323,20 @@ export async function promptAccountForAccess(
       return null;
     }
   }
+}
+
+async function promptAccountForContentWriteAccess(
+  owner: string,
+  repo: string,
+  reason?: string,
+): Promise<Octokit | null> {
+  return promptAccountForAccess(
+    owner,
+    repo,
+    reason,
+    checkRepoContentWriteAccess,
+    'file write access',
+  );
 }
 
 /**
@@ -310,6 +373,43 @@ async function withWriteAccess<T>(
       );
     }
     // Let the retry's own error bubble so the real cause isn't masked.
+    return await op(recovered);
+  }
+}
+
+export async function withContentWriteAccess<T>(
+  owner: string,
+  repo: string,
+  op: (octokit: Octokit) => Promise<T>,
+): Promise<T> {
+  const octokit = await getOctokit(owner);
+  try {
+    return await op(octokit);
+  } catch (err) {
+    if (!isAccessError(err)) {
+      throw err;
+    }
+
+    const probe = await checkRepoContentWriteAccess(octokit, owner, repo);
+    if (probe.ok) {
+      throw err;
+    }
+
+    if (probe.requiresPrivateRepoAccess) {
+      throw new GitHubRepoAccessError(
+        `${probe.reason} Enable private repository access and try again.`,
+        true,
+      );
+    }
+
+    const recovered = await promptAccountForContentWriteAccess(owner, repo, probe.reason);
+    if (!recovered) {
+      throw new GitHubRepoAccessError(
+        `Unable to update sharing in ${owner}/${repo}. ${probe.reason ?? ''} ` +
+        'Choose a GitHub account with write access to the repository and try again.',
+      );
+    }
+
     return await op(recovered);
   }
 }

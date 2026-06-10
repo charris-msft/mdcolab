@@ -56,6 +56,21 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+async function showGitHubWriteFailure(prefix: string, error: unknown): Promise<void> {
+  if (api.isPrivateRepoAccessRequiredError(error)) {
+    const choice = await vscode.window.showErrorMessage(
+      `${prefix}: ${getErrorMessage(error)}`,
+      'Enable Private Repo Access',
+    );
+    if (choice === 'Enable Private Repo Access') {
+      await vscode.commands.executeCommand('mdcolab.enablePrivateRepoAccess');
+    }
+    return;
+  }
+
+  vscode.window.showErrorMessage(`${prefix}: ${getErrorMessage(error)}`);
+}
+
 function getCommandIssueNumber(item: ThreadCommandItem | number): number | undefined {
   return typeof item === 'number' ? item : item.thread?.issueNumber;
 }
@@ -262,7 +277,6 @@ export async function activate(context: vscode.ExtensionContext) {
             owner: repoInfo.owner,
             repo: repoInfo.repo,
             path: '.mdcolab/sharing.json',
-            ref: repoInfo.branch,
           });
           if (!Array.isArray(pre.data) && pre.data.type === 'file' && pre.data.content) {
             const parsed = JSON.parse(
@@ -382,77 +396,74 @@ export async function activate(context: vscode.ExtensionContext) {
       const allowEditing = editingPick.value;
 
       try {
-        // Authenticate and get Octokit
-        const octokit = await api.getOctokit(repoInfo.owner);
+        await api.withContentWriteAccess(repoInfo.owner, repoInfo.repo, async (octokit) => {
+          // Identify the current user for sharedBy
+          let sharedBy = 'unknown';
+          try {
+            const { data } = await octokit.users.getAuthenticated();
+            sharedBy = data.login;
+          } catch { /* best-effort */ }
 
-        // Identify the current user for sharedBy
-        let sharedBy = 'unknown';
-        try {
-          const { data } = await octokit.users.getAuthenticated();
-          sharedBy = data.login;
-        } catch { /* best-effort */ }
+          // Read existing .mdcolab/sharing.json (if any). Always read-merge-write
+          // so we never clobber entries for other documents.
+          const sharingPath = '.mdcolab/sharing.json';
+          let existingSha: string | undefined;
+          interface SharingDocument {
+            mode: SharingMode;
+            users?: string[];
+            allowEditing?: boolean;
+            expiresAt?: string;
+            sharedBy: string;
+            sharedAt: string;
+          }
+          interface SharingConfig {
+            version: number;
+            documents: Record<string, SharingDocument>;
+          }
+          let sharingConfig: SharingConfig = { version: 1, documents: {} };
 
-        // Read existing .mdcolab/sharing.json (if any). Always read-merge-write
-        // so we never clobber entries for other documents.
-        const sharingPath = '.mdcolab/sharing.json';
-        let existingSha: string | undefined;
-        interface SharingDocument {
-          mode: SharingMode;
-          users?: string[];
-          allowEditing?: boolean;
-          expiresAt?: string;
-          sharedBy: string;
-          sharedAt: string;
-        }
-        interface SharingConfig {
-          version: number;
-          documents: Record<string, SharingDocument>;
-        }
-        let sharingConfig: SharingConfig = { version: 1, documents: {} };
+          try {
+            const { data } = await octokit.repos.getContent({
+              owner: repoInfo.owner,
+              repo: repoInfo.repo,
+              path: sharingPath,
+            });
+            if (!Array.isArray(data) && data.type === 'file' && data.content) {
+              existingSha = data.sha;
+              const decoded = Buffer.from(data.content, 'base64').toString('utf-8');
+              const parsed = JSON.parse(decoded) as Partial<SharingConfig>;
+              sharingConfig = {
+                version: parsed.version ?? 1,
+                documents: parsed.documents ?? {},
+              };
+            }
+          } catch (err: unknown) {
+            if ((err as { status?: number }).status !== 404) { throw err; }
+            // File doesn't exist yet — we'll create it
+          }
 
-        try {
-          const { data } = await octokit.repos.getContent({
+          // Write/overwrite entry for this file
+          sharingConfig.documents[relativePath] = {
+            mode,
+            users: mode === 'specific_people' ? users : undefined,
+            allowEditing: allowEditing === true ? true : undefined,
+            expiresAt,
+            sharedBy,
+            sharedAt: new Date().toISOString(),
+          };
+
+          const updatedContent = Buffer.from(
+            JSON.stringify(sharingConfig, null, 2) + '\n'
+          ).toString('base64');
+
+          await octokit.repos.createOrUpdateFileContents({
             owner: repoInfo.owner,
             repo: repoInfo.repo,
             path: sharingPath,
-            ref: repoInfo.branch,
+            message: `docs: update sharing for ${relativePath}`,
+            content: updatedContent,
+            sha: existingSha,
           });
-          if (!Array.isArray(data) && data.type === 'file' && data.content) {
-            existingSha = data.sha;
-            const decoded = Buffer.from(data.content, 'base64').toString('utf-8');
-            const parsed = JSON.parse(decoded) as Partial<SharingConfig>;
-            sharingConfig = {
-              version: parsed.version ?? 1,
-              documents: parsed.documents ?? {},
-            };
-          }
-        } catch (err: unknown) {
-          if ((err as { status?: number }).status !== 404) { throw err; }
-          // File doesn't exist yet — we'll create it
-        }
-
-        // Write/overwrite entry for this file
-        sharingConfig.documents[relativePath] = {
-          mode,
-          users: mode === 'specific_people' ? users : undefined,
-          allowEditing: allowEditing === true ? true : undefined,
-          expiresAt,
-          sharedBy,
-          sharedAt: new Date().toISOString(),
-        };
-
-        const updatedContent = Buffer.from(
-          JSON.stringify(sharingConfig, null, 2) + '\n'
-        ).toString('base64');
-
-        await octokit.repos.createOrUpdateFileContents({
-          owner: repoInfo.owner,
-          repo: repoInfo.repo,
-          path: sharingPath,
-          message: `docs: update sharing for ${relativePath}`,
-          content: updatedContent,
-          sha: existingSha,
-          branch: repoInfo.branch,
         });
 
         // Copy the link
@@ -473,7 +484,7 @@ export async function activate(context: vscode.ExtensionContext) {
           `Shared (${modeLabel}, ${permLabel}). Link copied to clipboard.`
         );
       } catch (err) {
-        vscode.window.showErrorMessage('Failed to share: ' + (err instanceof Error ? err.message : err));
+        await showGitHubWriteFailure('Failed to share', err);
       }
     })
   );
@@ -814,54 +825,54 @@ export async function activate(context: vscode.ExtensionContext) {
         );
         if (confirm !== 'Stop sharing') { return; }
         try {
-          const octokit = await api.getOctokit(item.repoContext.owner);
-          const sharingPath = '.mdcolab/sharing.json';
-          const { data } = await octokit.repos.getContent({
-            owner: item.repoContext.owner,
-            repo: item.repoContext.repo,
-            path: sharingPath,
-            ref: item.repoContext.branch,
-          });
-          if (Array.isArray(data) || data.type !== 'file' || !data.content) {
-            throw new Error('sharing.json not found');
-          }
-          const decoded = Buffer.from(data.content, 'base64').toString('utf-8');
-          const parsed = JSON.parse(decoded) as {
-            version?: number;
-            documents: Record<string, unknown>;
-          };
-          delete parsed.documents[item.filePath];
-          const remaining = Object.keys(parsed.documents).length;
-          if (remaining === 0) {
-            await octokit.repos.deleteFile({
-              owner: item.repoContext.owner,
-              repo: item.repoContext.repo,
-              path: sharingPath,
-              message: 'docs: remove sharing config',
-              sha: data.sha,
-              branch: item.repoContext.branch,
-            });
-          } else {
-            await octokit.repos.createOrUpdateFileContents({
-              owner: item.repoContext.owner,
-              repo: item.repoContext.repo,
-              path: sharingPath,
-              message: `docs: stop sharing ${item.filePath}`,
-              content: Buffer.from(
-                JSON.stringify(parsed, null, 2) + '\n'
-              ).toString('base64'),
-              sha: data.sha,
-              branch: item.repoContext.branch,
-            });
-          }
+          await api.withContentWriteAccess(
+            item.repoContext.owner,
+            item.repoContext.repo,
+            async (octokit) => {
+              const sharingPath = '.mdcolab/sharing.json';
+              const { data } = await octokit.repos.getContent({
+                owner: item.repoContext.owner,
+                repo: item.repoContext.repo,
+                path: sharingPath,
+              });
+              if (Array.isArray(data) || data.type !== 'file' || !data.content) {
+                throw new Error('sharing.json not found');
+              }
+              const decoded = Buffer.from(data.content, 'base64').toString('utf-8');
+              const parsed = JSON.parse(decoded) as {
+                version?: number;
+                documents: Record<string, unknown>;
+              };
+              delete parsed.documents[item.filePath];
+              const remaining = Object.keys(parsed.documents).length;
+              if (remaining === 0) {
+                await octokit.repos.deleteFile({
+                  owner: item.repoContext.owner,
+                  repo: item.repoContext.repo,
+                  path: sharingPath,
+                  message: 'docs: remove sharing config',
+                  sha: data.sha,
+                });
+              } else {
+                await octokit.repos.createOrUpdateFileContents({
+                  owner: item.repoContext.owner,
+                  repo: item.repoContext.repo,
+                  path: sharingPath,
+                  message: `docs: stop sharing ${item.filePath}`,
+                  content: Buffer.from(
+                    JSON.stringify(parsed, null, 2) + '\n'
+                  ).toString('base64'),
+                  sha: data.sha,
+                });
+              }
+            },
+          );
           await sharedFilesProvider.refresh();
           vscode.window.showInformationMessage(
             `Stopped sharing ${item.filePath}`
           );
         } catch (err) {
-          vscode.window.showErrorMessage(
-            'Failed to unshare: ' + (err instanceof Error ? err.message : err)
-          );
+          await showGitHubWriteFailure('Failed to unshare', err);
         }
       }
     )
